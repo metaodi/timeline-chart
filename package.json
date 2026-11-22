@@ -1,0 +1,10 @@
+{
+  "name": "timeline-chart",
+  "private": true,
+  "description": "Client-only builder for Mermaid timelines (sprints, PIs, release trains)",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "test": "node --test test/*.test.mjs"
+  }
+}
