@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { toMermaid, escapeItem, getKind, setKind, stripKind, isEmpty } from '../js/model.js';
+import { toMermaid, escapeItem, getKind, setKind, stripKind, isEmpty, normalize } from '../js/model.js';
 import { parseMermaid } from '../js/parser.js';
 import { generateSprints, nextName } from '../js/generator.js';
 import { EXAMPLES } from '../js/examples.js';
@@ -96,4 +96,12 @@ test('nextName increments trailing numbers', () => {
   assert.equal(nextName('3'), '4');
   assert.equal(nextName('2026.1'), '2026.2');
   assert.equal(nextName('24-09'), '24-10');
+});
+
+test('title alignment is a setting outside the Mermaid code', () => {
+  assert.equal(normalize({}).titleAlign, 'center');
+  assert.equal(normalize({ titleAlign: 'left' }).titleAlign, 'left');
+  assert.equal(normalize({ titleAlign: 'bogus' }).titleAlign, 'center');
+  const t = { title: 'T', periods: [{ label: 'a', events: [] }] };
+  assert.equal(toMermaid({ ...t, titleAlign: 'left' }), toMermaid(t));
 });

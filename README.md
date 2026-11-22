@@ -8,7 +8,8 @@ Diagrams are rendered with [Pele](https://pele.run), a fast, lightweight Mermaid
 - **Drag & drop** with the ⠿ handle (mouse and touch): move Gantt tasks and timeline periods to another section,
   timeline items to another period. Without a mouse, ↑/↓ at the edge of a section moves an entry into the
   neighbouring section; <kbd>Esc</kbd> cancels a drag.
-- **Live preview** rendered by Pele, horizontal (`LR`) or vertical (`TD`), with colour presets
+- **Live preview** rendered by Pele, horizontal (`LR`) or vertical (`TD`), with colour presets; the title can be
+  centred (Pele default) or aligned left (applied to preview and PNG/SVG export)
 - **Responsive diagrams**: the preview re-lays out to the available width; on narrow screens a wide horizontal
   timeline switches to vertical automatically (toggle "Responsive"). Pinch/scroll zoom is built in.
 - **Two chart types**: *Timeline* (periods with items) and *Gantt* (bars that span several sprints)
@@ -123,6 +124,7 @@ js/export.js        SVG / PNG download, clipboard
 js/svg-vars.js      resolves CSS variables to concrete colours for SVG export
 js/pele-css.js      CSS for the Pele playground (theme + Gantt colours)
 js/drag.js          drag & drop between lists (pointer events: mouse and touch)
+js/svg-title.js     left-aligned diagram title
 js/storage.js       localStorage autosave, share-link encoding
 js/app.js           UI wiring
 test/               node:test unit tests
