@@ -37,7 +37,8 @@ data.
 - **Sections** (teams, epics, workstreams) contain **bars**, **milestones** ◆ and **deadlines** (vertical line).
 - **Status**: planned, in progress (outlined), done (faded), critical (red).
 - Change a duration or the plan start and everything that follows moves with it.
-- Bars are coloured like the timeline diagram: PIs and their sprints per PI, teams per section.
+- **Colours**: PIs and their sprints share a colour per PI. Each section (e.g. a category of work) has its own colour:
+  automatic (never a PI colour, never red, which means *critical*) or chosen with the colour dot in the section header.
 
 The generated Mermaid code is a standard `gantt` chart with concrete dates, so it renders the same everywhere. The
 settings and the edited PIs/sprints are stored as `%% sprint-calendar …` / `%% sprint-plan …` comments: importing the

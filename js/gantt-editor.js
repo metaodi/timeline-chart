@@ -3,7 +3,8 @@
  * epics…) and tasks defined by a start rule and a duration. Concrete dates are
  * computed by scheduleGantt() and shown under each task.
  */
-import { TASK_TYPES, STATUSES, DURATION_UNITS, scheduleGantt, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
+import { TASK_TYPES, STATUSES, DURATION_UNITS, SECTION_COLOURS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
+import { themeVars } from './themes.js';
 import { formatDate, isoDate, nextName } from './generator.js';
 
 const esc = (s) =>
@@ -110,6 +111,26 @@ export function createGanttEditor(root, api) {
   }
 
   let planOpen = false; // remember whether the PI/sprint list is expanded
+  let paletteOpen = -1; // section whose colour palette is shown
+
+  const colourOf = (k) => themeVars(api.getState().theme)[`--pele-series-${k}`];
+
+  /** Colour dot in the section header; opens the palette. */
+  function swatch(s, cal) {
+    const sec = g().sections[s];
+    const k = sectionColour(g(), s, cal);
+    const label = sec.color ? 'Section colour' : 'Section colour (automatic)';
+    return `<button type="button" class="swatch${sec.color ? '' : ' auto'}" data-gaction="palette" style="--c:${colourOf(k)}" title="${label}" aria-label="${label}" aria-expanded="${paletteOpen === s}"></button>`;
+  }
+
+  function palette(s) {
+    const current = g().sections[s].color || 0;
+    const dots = Array.from({ length: SECTION_COLOURS }, (_, i) => i + 1)
+      .map((k) => `<button type="button" class="swatch${k === current ? ' on' : ''}" data-gaction="colour" data-colour="${k}" style="--c:${colourOf(k)}" aria-label="Colour ${k}"></button>`)
+      .join('');
+    return `<div class="palette" role="group" aria-label="Section colour">
+      <button type="button" class="btn small${current ? '' : ' on'}" data-gaction="colour" data-colour="0">Auto</button>${dots}</div>`;
+  }
 
   function planHtml(cal) {
     const pis = g().pis;
@@ -188,11 +209,13 @@ export function createGanttEditor(root, api) {
     const sched = scheduleGantt(g());
     const sections = g()
       .sections.map(
-        (sec, s) => `<div class="group card section" data-gs="${s}">
+        (sec, s) => `<div class="group card section" data-gs="${s}" style="--sec:${colourOf(sectionColour(g(), s, sched.cal))}">
         <div class="group-head">
-          <textarea rows="1" class="section-name" data-gfield="section" data-gs="${s}" placeholder="Team, epic, workstream…">${esc(sec.name)}</textarea>
+          ${swatch(s, sched.cal)}
+          <textarea rows="1" class="section-name" data-gfield="section" data-gs="${s}" placeholder="Category, team, epic…">${esc(sec.name)}</textarea>
           <span class="tools">${iconBtn('section-up', 'Move section up', '↑')}${iconBtn('section-down', 'Move section down', '↓')}${iconBtn('section-dup', 'Duplicate section', '⧉')}${iconBtn('section-delete', 'Delete section', '✕', 'del')}</span>
         </div>
+        ${paletteOpen === s ? palette(s) : ''}
         <ul class="gtasks">${sec.tasks.map((task, t) => taskHtml(task, s, t, sched)).join('')}</ul>
         <div class="gadd">
           <button type="button" class="add-event" data-gaction="add-task">+ Bar</button>
@@ -272,6 +295,10 @@ export function createGanttEditor(root, api) {
   }
   const actions = {
     calendar: () => api.openCalendar(),
+    palette: ({ s }) => {
+      paletteOpen = paletteOpen === s ? -1 : s;
+      render();
+    },
     'pi-add': () =>
       api.change(() => {
         const pis = g().pis;
@@ -307,7 +334,7 @@ export function createGanttEditor(root, api) {
     'section-dup': ({ s }) =>
       api.change(() => {
         const sec = g().sections[s];
-        g().sections.splice(s + 1, 0, { name: sec.name, tasks: sec.tasks.map(copy) });
+        g().sections.splice(s + 1, 0, { name: sec.name, color: sec.color, tasks: sec.tasks.map(copy) });
       }, sel.section(s + 1)),
     'section-delete': ({ s }) => api.change(() => g().sections.splice(s, 1)),
     'add-task': addTask('task'),
@@ -331,7 +358,14 @@ export function createGanttEditor(root, api) {
 
   root.addEventListener('click', (ev) => {
     const btn = ev.target.closest('[data-gaction]');
-    if (btn) actions[btn.dataset.gaction]?.(locate(btn));
+    if (!btn) return;
+    if (btn.dataset.gaction === 'colour') {
+      const { s } = locate(btn);
+      paletteOpen = -1;
+      api.change(() => (g().sections[s].color = Number(btn.dataset.colour) || 0));
+      return;
+    }
+    actions[btn.dataset.gaction]?.(locate(btn));
   });
 
   root.addEventListener('input', (ev) => {

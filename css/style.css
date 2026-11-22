@@ -294,6 +294,16 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
 .gtask.status-done textarea { color: var(--muted); }
 .gtask.status-crit textarea { color: var(--deadline); }
 .gadd { display: flex; gap: 4px; flex-wrap: wrap; }
+.swatch {
+  flex: 0 0 auto; width: 22px; height: 22px; margin: 6px 2px; padding: 0; cursor: pointer;
+  border-radius: 50%; border: 2px solid var(--surface); background: var(--c);
+  box-shadow: 0 0 0 1px var(--border);
+}
+.swatch.auto { background: linear-gradient(135deg, var(--c) 55%, var(--surface-2) 55%); }
+.swatch.on, .swatch[aria-expanded='true'] { box-shadow: 0 0 0 2px var(--text); }
+.palette { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 2px 0 4px; }
+.palette .btn.on { border-color: var(--text); }
+.group.section { border-left-color: var(--sec, var(--accent)); }
 .gadd .add-event { margin-left: 0; }
 
 /* ---------------------------------------------------------------- preview + code */

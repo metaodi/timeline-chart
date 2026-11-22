@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { toMermaid, normalize } from '../js/model.js';
 import { parseMermaid } from '../js/parser.js';
 import { sprintCalendar } from '../js/generator.js';
-import { taskLine, scheduleGantt, escapeGanttText } from '../js/gantt.js';
+import { taskLine, scheduleGantt, escapeGanttText, sectionColour } from '../js/gantt.js';
 import { ganttExample } from '../js/examples.js';
 
 const calendar = { startDate: '2026-01-05', sprintWeeks: 2, sprintCount: 8, sprintsPerPI: 4, ipIteration: true, firstPI: '2026.1' };
@@ -146,4 +146,14 @@ test('sprint numbering can restart in every PI', () => {
   const code = toMermaid(plan([bar('A', 's6', '1s')], { calendar: { ...calendar, restartNumbering: true } }));
   assert.match(code, /restart=1/);
   assert.equal(parseMermaid(code).timeline.gantt.calendar.restartNumbering, true);
+});
+
+test('section colours: automatic after the PI colours, or chosen per section', () => {
+  const state = normalize(plan([bar('A', 'plan', '1s')]));
+  state.gantt.sections.push({ name: 'Ops', color: 0, tasks: [bar('B', 'plan', '1w')] }, { name: 'Dev', color: 3, tasks: [bar('C', 'plan', '1w')] });
+  const g = state.gantt;
+  assert.deepEqual([0, 1, 2].map((i) => sectionColour(g, i)), [3, 5, 3]); // PIs use 1 and 2; red (4) is kept for "critical"
+  const code = toMermaid(state);
+  assert.match(code, /%% section-colours 0,0,3\n/);
+  assert.deepEqual(parseMermaid(code).timeline.gantt.sections.map((s) => s.color), [0, 0, 3]);
 });

@@ -7,7 +7,7 @@
  * Works on the DOM of a rendered SVG (preview or export). Task ids come from
  * gantt.js: "pi1", "s3" (sprints) and "g0t2" (section 0, task 2).
  */
-import { calendarOf } from './gantt.js';
+import { calendarOf, sectionColour } from './gantt.js';
 import { themeVars } from './themes.js';
 
 const SERIES = 8;
@@ -24,13 +24,13 @@ function luminance(hex) {
 }
 
 /** 1-based series index for a task id, or null to keep Pele's styling. */
-function seriesFor(id, cal) {
+function seriesFor(id, cal, gantt) {
   let m;
   const pi = cal.pis.findIndex((p) => p.id === id);
   if (pi >= 0) return (pi % SERIES) + 1;
   const sprint = cal.sprints.find((sp) => sp.id === id);
   if (sprint) return sprint.pi == null ? 1 : (sprint.pi % SERIES) + 1;
-  if ((m = /^g(\d+)t\d+$/.exec(id))) return (Number(m[1]) % SERIES) + 1;
+  if ((m = /^g(\d+)t\d+$/.exec(id))) return sectionColour(gantt, Number(m[1]), cal);
   return null;
 }
 
@@ -58,7 +58,7 @@ export function styleGantt(svg, state) {
   const right = num(svg, 'width') || svg.viewBox?.baseVal?.width || Infinity;
 
   for (const g of tasks) {
-    const k = seriesFor(g.dataset.id, cal);
+    const k = seriesFor(g.dataset.id, cal, state.gantt);
     const shape = g.querySelector('rect, path');
     const label = g.querySelector('text.pele-label');
     const crit = g.classList.contains('pele-crit');

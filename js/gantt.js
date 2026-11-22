@@ -10,7 +10,7 @@
  *   showSprints: boolean,      // a "Sprints" row
  *   excludeWeekends: boolean,
  *   todayMarker: boolean,
- *   sections: [{ name, tasks: Task[] }],
+ *   sections: [{ name, color, tasks: Task[] }],   // color: 0 = automatic, 1..8 = theme colour
  * }
  * Task = {
  *   id: string,          // stable id, used by "after:<id>"
@@ -48,6 +48,7 @@ export const STATUSES = [
 
 const CAL_KEY = 'sprint-calendar';
 const PLAN_KEY = 'sprint-plan';
+const COLOURS_KEY = 'section-colours';
 const isSprintRef = (ref) => /^s\d+$/.test(ref ?? '');
 const isDate = (ref) => /^\d{4}-\d{2}-\d{2}$/.test(ref ?? '');
 
@@ -75,7 +76,21 @@ export function newTask(type = 'task', from = 'prev', duration = '1s') {
 }
 
 export function newGanttSection(name = '', task = newTask('task', 'plan')) {
-  return { name, tasks: [task] };
+  return { name, color: 0, tasks: [task] };
+}
+
+export const SECTION_COLOURS = 8;
+/** Colours for automatic assignment: all but no. 4 (red), which stands for "critical". */
+const AUTO_COLOURS = [1, 2, 3, 5, 6, 7, 8];
+
+/**
+ * Theme colour (1..8) of a section: its chosen colour, or automatically the
+ * next colours after those used by the PIs, so categories never look like a PI.
+ */
+export function sectionColour(g, si, cal = calendarOf(g)) {
+  const chosen = Number(g.sections[si]?.color) || 0;
+  if (chosen >= 1 && chosen <= SECTION_COLOURS) return chosen;
+  return AUTO_COLOURS[(cal.pis.length + si) % AUTO_COLOURS.length];
 }
 
 /** Next free id with a prefix ("s" for sprints, "pi" for PIs) within the sprint plan. */
@@ -122,6 +137,7 @@ export function normalizeGantt(g) {
   d.sections = Array.isArray(d.sections)
     ? d.sections.map((s) => ({
         name: String(s?.name ?? ''),
+        color: Math.max(0, Math.min(SECTION_COLOURS, Math.round(Number(s?.color) || 0))),
         tasks: Array.isArray(s?.tasks)
           ? s.tasks.map((t) => ({
               id: typeof t?.id === 'string' && t.id ? t.id : newId(),
@@ -314,6 +330,7 @@ export function toGanttMermaid(t, frontmatter = []) {
       for (const s of cal.sprints) out.push(`    ${escapeGanttText(s.short)} : ${s.id}, ${isoDate(s.start)}, ${isoDate(s.end)}`);
     }
   }
+  if (g.sections.some((s) => s.color)) out.push(`  %% ${COLOURS_KEY} ${g.sections.map((s) => s.color || 0).join(',')}`);
   g.sections.forEach((s, si) => {
     const lines = s.tasks.map((task, ti) => taskLine(task, dates[si][ti], `g${si}t${ti}`)).filter(Boolean);
     out.push(`  section ${escapeGanttText(s.name) || '&nbsp;'}`, ...lines);
@@ -378,6 +395,7 @@ export function parseGanttMermaid(code) {
   let generated = null; // 'pis' | 'sprints' while inside a generated calendar row
   let prevEnd = null;
   let seenHeader = false;
+  let colours = [];
 
   String(code)
     .replace(/\r\n?/g, '\n')
@@ -388,7 +406,9 @@ export function parseGanttMermaid(code) {
       if (!line) return;
       if (line.startsWith('%%')) {
         if (line.includes(CAL_KEY)) g.calendar = readCalendarComment(line);
-        else if (line.includes(PLAN_KEY)) {
+        else if (line.includes(COLOURS_KEY)) {
+          colours = line.slice(line.indexOf(COLOURS_KEY) + COLOURS_KEY.length).split(',').map((x) => Number(x.trim()) || 0);
+        } else if (line.includes(PLAN_KEY)) {
           try {
             const plan = JSON.parse(line.slice(line.indexOf(PLAN_KEY) + PLAN_KEY.length));
             g.pis = normalizePlan(plan.map((p) => ({ ...p, sprints: p.sprints.map(([id, name, weeks]) => ({ id, name, weeks })) })));
@@ -472,6 +492,7 @@ export function parseGanttMermaid(code) {
       }
     });
 
+  g.sections.forEach((sec, i) => (sec.color = colours[i] || 0));
   snapToSprints(g);
   if (!seenHeader) res.warnings.unshift('No "gantt" header found');
   return res;
