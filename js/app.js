@@ -454,7 +454,8 @@ function exportSvg() {
     return null;
   }
   try {
-    const { svg } = render(currentCode, { padding: 16 });
+    // Same width as the preview (e.g. the wide view): what you see is what you export.
+    const { svg } = render(previewCode(), { padding: 16 });
     const el = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
     const vars = themeVars(state.theme, state.disableMulticolor);
     applyVars(el, vars);

@@ -61,7 +61,8 @@ data.
   *Subtle grey* (grey / a lighter grey mixed from the theme), *No stripes*, or two custom colours.
 - **Width**: the chart width grows with the plan (about 40px per week, 1000–4000px, Mermaid `useWidth`). On desktop
   the preview shows it at full width and scrolls horizontally; **⤢ Wide** hides the editor so the chart can use the
-  whole window. On phones it scales down (zoom for details).
+  whole window. PNG/SVG exports have the same width as the preview (so the wide view gives a wide export). On phones
+  it scales down (zoom for details) and exports use the chart's own width.
 - **Colours**: PIs are black and sprints grey (in dark themes: light), so colour is left to the sections. Each section
   (e.g. a category of work) has its own colour: automatic (never red, which means *critical*) or chosen with the
   colour dot in the section header.
