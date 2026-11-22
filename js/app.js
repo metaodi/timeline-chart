@@ -6,6 +6,7 @@ import { createGanttEditor, editorScroller } from './gantt-editor.js';
 import { sortable, moveBetween } from './drag.js';
 import { styleGantt } from './gantt-style.js';
 import { peleCss } from './pele-css.js';
+import { alignTitle } from './svg-title.js';
 import { emptyGantt, newGanttSection } from './gantt.js';
 import { toMermaid, normalize, isEmpty, newPeriod, newSection, THEMES, KINDS, getKind, stripKind, setKind } from './model.js';
 import { parseMermaid } from './parser.js';
@@ -295,6 +296,7 @@ function renderSettings() {
   document.body.dataset.mode = state.mode;
   $$('input[name="mode"]').forEach((r) => (r.checked = r.value === state.mode));
   $('#title').value = state.title;
+  $('#title-left').checked = state.titleAlign === 'left';
   $$('input[name="direction"]').forEach((r) => (r.checked = r.value === state.direction));
   $('#theme').value = state.theme;
   $('#multicolor').checked = !state.disableMulticolor;
@@ -333,6 +335,11 @@ function bindSettings() {
   $('#theme').addEventListener('change', (ev) => {
     snapshot();
     state.theme = ev.target.value;
+    update();
+  });
+  $('#title-left').addEventListener('change', (ev) => {
+    snapshot();
+    state.titleAlign = ev.target.checked ? 'left' : 'center';
     update();
   });
   $('#multicolor').addEventListener('change', (ev) => {
@@ -382,7 +389,9 @@ function previewOptions() {
     onError: showError,
     // Runs after every (re-)layout, including resizes.
     onRender: () => {
-      insideLabels = styleGantt($('#preview svg.pele'), state);
+      const svg = $('#preview svg.pele');
+      insideLabels = styleGantt(svg, state);
+      alignTitle(svg, state.titleAlign);
       if (codeTab === 'css') showCode(); // the CSS depends on the layout (labels on bars)
     },
   };
@@ -408,10 +417,17 @@ function renderPreview() {
   if (!mounted) {
     preview.innerHTML = '';
     mounted = mount(preview, code, previewOptions());
+  } else if (code === lastPreview.code && state.titleAlign !== lastPreview.titleAlign) {
+    // Only the title alignment changed (not part of the code): mount again from scratch.
+    mounted.destroy();
+    preview.innerHTML = '';
+    mounted = mount(preview, code, previewOptions());
   } else {
     mounted.update(code, previewOptions());
   }
+  lastPreview = { code, titleAlign: state.titleAlign };
 }
+let lastPreview = { code: '', titleAlign: 'center' };
 
 /** On desktop a Gantt chart fills at least the preview width (e.g. in the wide view). */
 function previewCode() {
@@ -435,6 +451,7 @@ function exportSvg() {
     const vars = themeVars(state.theme, state.disableMulticolor);
     applyVars(el, vars);
     styleGantt(el, state);
+    alignTitle(el, state.titleAlign);
     const background = $('#transparent').checked ? null : vars['--pele-bg'];
     return { el, background };
   } catch (err) {

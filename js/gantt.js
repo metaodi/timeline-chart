@@ -302,29 +302,46 @@ function calendarComment(c) {
  * One task line from scheduled dates, or null if the task could not be placed.
  * `id` (e.g. "g0t2") lets gantt-style.js colour the bar by its section.
  */
-export function taskLine(task, when, id = '') {
+export function taskLine(task, when, id = '', span = 0) {
   if (!when) return null;
   const name = escapeGanttText(task.name) || '&nbsp;';
   const tags = [];
   if (task.type === 'milestone') tags.push('milestone');
   if (task.type === 'deadline') tags.push('vert');
   if (task.status) tags.push(task.status);
-  const dates = task.type === 'task' ? [isoDate(when.start), isoDate(when.end)] : [isoDate(when.start), '0d'];
+  let dates;
+  if (task.type === 'task') dates = [isoDate(when.start), isoDate(when.end)];
+  else if (task.type === 'milestone' && span > 0)
+    // A range centred on the date (Pele draws the diamond in its middle): in the compact
+    // layout the milestone and its label then get their own row instead of overlapping.
+    dates = [isoDate(addDays(when.start, -span)), isoDate(addDays(when.start, span - 1))];
+  else dates = [isoDate(when.start), '0d'];
   return `    ${name} : ${[...tags, id, ...dates].filter(Boolean).join(', ')}`;
 }
 
-/** @param {object} t full app state (title, accTitle, accDescr, theme, gantt) */
+/** Days a milestone's diamond and label take up on each side of its date. */
+export function milestoneSpan(name, pxPerDay) {
+  const px = String(name).trim().length * 7.5 + 40; // label (≈13px font) + diamond + gap
+  return Math.max(1, Math.min(90, Math.ceil(px / Math.max(pxPerDay, 0.1))));
+}
 /**
  * Chart width (Mermaid `useWidth`): about 40px per week, so long plans get wider
  * instead of cramped. Between 1000 and 4000px.
  */
 export function ganttWidth(cal, dates) {
+  return ganttScale(cal, dates).width;
+}
+
+/** Chart width and its approximate scale (pixels per day on the time axis). */
+export function ganttScale(cal, dates) {
   const all = [...cal.sprints, ...dates.flat().filter(Boolean)];
-  if (!all.length) return 1000;
+  if (!all.length) return { width: 1000, pxPerDay: 10 };
   const start = Math.min(...all.map((d) => d.start.getTime()));
   const end = Math.max(...all.map((d) => d.end.getTime()));
-  const weeks = (end - start) / (7 * 864e5) + 1;
-  return Math.max(1000, Math.min(4000, Math.round((260 + weeks * 40) / 10) * 10));
+  const days = (end - start) / 864e5 + 1;
+  const width = Math.max(1000, Math.min(4000, Math.round((260 + (days / 7) * 40) / 10) * 10));
+  // ~180px for section names and padding; start/end bound the time axis
+  return { width, pxPerDay: (width - 180) / days, start, end };
 }
 
 export function toGanttMermaid(t, frontmatter = []) {
@@ -332,7 +349,8 @@ export function toGanttMermaid(t, frontmatter = []) {
   const { cal, dates } = scheduleGantt(g);
   const fm = [...frontmatter];
   const at = fm.indexOf('    displayMode: compact');
-  if (at >= 0) fm.splice(at + 1, 0, `    useWidth: ${ganttWidth(cal, dates)}`);
+  const scale = ganttScale(cal, dates);
+  if (at >= 0) fm.splice(at + 1, 0, `    useWidth: ${scale.width}`);
   const out = [...fm, 'gantt'];
   if (t.title?.trim()) out.push(`  title ${t.title.replace(/\s*\n\s*/g, ' ').trim()}`);
   if (t.accTitle?.trim()) out.push(`  accTitle: ${t.accTitle.trim()}`);
@@ -361,7 +379,19 @@ export function toGanttMermaid(t, frontmatter = []) {
   const rows = g.rows ?? ROW_PRESETS.standard.rows;
   if (rows.join() !== ROW_PRESETS.standard.rows.join()) out.push(`  %% ${ROWS_KEY} ${rows.join(',')}`);
   g.sections.forEach((s, si) => {
-    const lines = s.tasks.map((task, ti) => taskLine(task, dates[si][ti], `g${si}t${ti}`)).filter(Boolean);
+    const lines = s.tasks
+      .map((task, ti) => {
+        const when = dates[si][ti];
+        let span = 0;
+        if (task.type === 'milestone' && when) {
+          // keep the range inside the chart, or Pele would stretch the time axis
+          const d = when.start.getTime();
+          const room = Math.min((d - scale.start) / 864e5, (scale.end - d) / 864e5 + 1);
+          span = Math.min(milestoneSpan(task.name, scale.pxPerDay), Math.floor(room));
+        }
+        return taskLine(task, when, `g${si}t${ti}`, span);
+      })
+      .filter(Boolean);
     out.push(`  section ${escapeGanttText(s.name) || '&nbsp;'}`, ...lines);
   });
   return out.join('\n') + '\n';
@@ -496,7 +526,11 @@ export function parseGanttMermaid(code) {
           endStr = parts[0];
         }
         let end = isDate(endStr) ? parseDate(endStr) : start ? addDuration(start, endStr) : null;
-        if (task.type !== 'task' && start) end = start;
+        if (task.type !== 'task' && start) {
+          // milestone written as a range (see taskLine): its date is the middle
+          if (end && end > start) start = addDays(start, Math.floor(((end - start) / 864e5 + 1) / 2));
+          end = start;
+        }
         if (!end) {
           res.warnings.push(`Line ${i + 1}: could not read the dates of "${name}"`);
           return;

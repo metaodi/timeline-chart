@@ -183,3 +183,29 @@ test('row stripes: presets and custom colours, kept in the code', async () => {
   assert.deepEqual(parseMermaid(code).timeline.gantt.rows, ['surface', 'mix']);
   assert.deepEqual(normalize({ gantt: { rows: ['bogus', '#123456'] } }).gantt.rows, ['surface', '#123456']);
 });
+
+test('milestones: written as a range centred on the date, read back as the date', () => {
+  const when = { start: new Date('2026-02-10'), end: new Date('2026-02-10') };
+  assert.equal(taskLine({ name: 'Go', type: 'milestone', status: '' }, when, 'x', 4), '    Go : milestone, x, 2026-02-06, 2026-02-13');
+  assert.equal(taskLine({ name: 'Go', type: 'milestone', status: '' }, when, 'x', 0), '    Go : milestone, x, 2026-02-10, 0d');
+  assert.equal(taskLine({ name: 'Freeze', type: 'deadline', status: '' }, when, 'x', 4), '    Freeze : vert, x, 2026-02-10, 0d');
+  const { timeline } = parseMermaid('gantt\n  dateFormat YYYY-MM-DD\n  section S\n    Go : milestone, x, 2026-02-06, 2026-02-13\n');
+  assert.equal(timeline.gantt.sections[0].tasks[0].from, '2026-02-10');
+});
+
+test('milestones close together get separate ranges that overlap (own rows), inside the chart', () => {
+  const s = plan([
+    bar('A', 'plan', '8s'),
+    { id: 'm1', name: 'Go-live', type: 'milestone', status: '', from: '2026-02-10', duration: '', to: '' },
+    { id: 'm2', name: 'Hypercare', type: 'milestone', status: '', from: '2026-02-11', duration: '', to: '' },
+    { id: 'm3', name: 'Very last day', type: 'milestone', status: '', from: '2026-05-22', duration: '', to: '' },
+  ]);
+  const code = toMermaid(s);
+  const range = (n) => code.match(new RegExp(`${n} : milestone, \\w+, ([\\d-]+), ([\\d-]+)`)).slice(1);
+  const [a1, a2] = range('Go-live');
+  const [b1] = range('Hypercare');
+  assert.ok(b1 <= a2, 'ranges overlap, so the compact layout uses two rows');
+  assert.ok(a1 < '2026-02-10' && a2 >= '2026-02-10');
+  const [, c2] = range('Very last day');
+  assert.ok(c2 <= '2026-05-22', 'range stays inside the chart (no longer time axis)');
+});

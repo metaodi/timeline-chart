@@ -78,6 +78,7 @@ export function emptyTimeline() {
     direction: 'LR',
     theme: 'default',
     disableMulticolor: false,
+    titleAlign: 'center', // 'center' | 'left' (applied to the rendered SVG, not part of Mermaid)
     accTitle: '',
     accDescr: '',
     periods: [],
@@ -115,6 +116,7 @@ export function normalize(data) {
       }))
     : [];
   for (const k of ['title', 'accTitle', 'accDescr']) d[k] = String(d[k] ?? '');
+  d.titleAlign = d.titleAlign === 'left' ? 'left' : 'center';
   return d;
 }
 
