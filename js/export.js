@@ -1,4 +1,5 @@
 /** Download / clipboard helpers. */
+import { inlineCssVars } from './svg-vars.js';
 
 function slug(name) {
   return (
@@ -38,7 +39,16 @@ export function svgMarkup(svgEl, background) {
   clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
   clone.style.maxWidth = '';
   clone.style.height = '';
-  if (background) clone.style.backgroundColor = background;
+  // Concrete colours instead of CSS variables, so other programs show the same colours.
+  inlineCssVars(clone);
+  if (background) {
+    // A real rectangle: a CSS background on <svg> is ignored by many programs.
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('width', '100%');
+    rect.setAttribute('height', '100%');
+    rect.setAttribute('fill', background);
+    clone.insertBefore(rect, clone.firstChild);
+  }
   return new XMLSerializer().serializeToString(clone);
 }
 

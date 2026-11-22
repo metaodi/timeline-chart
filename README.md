@@ -89,8 +89,10 @@ timeline TD                # or "timeline" / "timeline LR"
 Characters that would break the grammar are escaped automatically (`#` → `#35;`, `: ` → `#58;`).
 
 Themes: Pele styles diagrams with CSS variables, so the theme menu applies colour presets (`js/themes.js`) to the
-preview and bakes them into SVG/PNG exports. The matching Mermaid theme name is written into the code's frontmatter so
-the diagram looks similar in other Mermaid tools.
+preview and bakes them into SVG/PNG exports. On SVG export every `var(...)` is replaced by its concrete colour and the
+background is a real rectangle (`js/svg-vars.js`), so the file looks the same in programs without CSS-variable support
+(Inkscape, Illustrator, PowerPoint, …). The matching Mermaid theme name is written into the code's frontmatter so the
+diagram looks similar in other Mermaid tools.
 
 Mermaid has no native milestone/deadline concept in timelines, so item types are stored as an emoji prefix
 (e.g. `🏁 Go-live`). That keeps them visible in the chart and lets them survive copy & import.
@@ -109,6 +111,7 @@ js/gantt-style.js   colours Gantt bars like the timeline, shortens overflowing l
 js/examples.js      built-in examples (add your own)
 js/themes.js        Pele colour presets (CSS variables)
 js/export.js        SVG / PNG download, clipboard
+js/svg-vars.js      resolves CSS variables to concrete colours for SVG export
 js/storage.js       localStorage autosave, share-link encoding
 js/app.js           UI wiring
 test/               node:test unit tests
