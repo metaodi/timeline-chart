@@ -5,7 +5,11 @@
  */
 import { TASK_TYPES, STATUSES, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
 import { themeVars, rowColour, themeColour } from './themes.js';
+import { sortable, moveBetween } from './drag.js';
 import { formatDate, isoDate, nextName } from './generator.js';
+
+/** The scrolling editor column on desktop; on phones the page itself scrolls. */
+export const editorScroller = () => (matchMedia('(max-width: 720px)').matches ? null : document.querySelector('.editor-pane'));
 
 const esc = (s) =>
   String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -101,6 +105,7 @@ export function createGanttEditor(root, api) {
     const placeholder = task.type === 'task' ? 'Feature, epic, story…' : task.type === 'milestone' ? 'Release, demo…' : 'Code freeze, deadline…';
     return `<li class="gtask type-${task.type} status-${task.status || 'planned'}" data-gt="${t}">
       <div class="gtask-head">
+        <span class="drag-handle drag-task" title="Drag to move – also to another section" aria-hidden="true">⠿</span>
         ${typePicker}
         <textarea rows="1" data-gfield="name" data-gs="${s}" data-gt="${t}" placeholder="${placeholder}">${esc(task.name)}</textarea>
         <span class="tools">${iconBtn('task-up', 'Move up', '↑')}${iconBtn('task-down', 'Move down', '↓')}${iconBtn('task-dup', 'Duplicate', '⧉')}${iconBtn('task-delete', 'Delete', '✕', 'del')}</span>
@@ -359,8 +364,19 @@ export function createGanttEditor(root, api) {
     'add-task': addTask('task'),
     'add-milestone': addTask('milestone'),
     'add-deadline': addTask('deadline'),
-    'task-up': ({ s, t }) => api.change(() => move(g().sections[s].tasks, t, -1)),
-    'task-down': ({ s, t }) => api.change(() => move(g().sections[s].tasks, t, 1)),
+    // at the edge of a section, ↑/↓ move the task into the neighbouring section
+    'task-up': ({ s, t }) =>
+      api.change(() => {
+        const secs = g().sections;
+        if (t > 0) move(secs[s].tasks, t, -1);
+        else if (secs[s - 1]) moveBetween(secs[s].tasks, 0, secs[s - 1].tasks, secs[s - 1].tasks.length);
+      }),
+    'task-down': ({ s, t }) =>
+      api.change(() => {
+        const secs = g().sections;
+        if (t < secs[s].tasks.length - 1) move(secs[s].tasks, t, 1);
+        else if (secs[s + 1]) moveBetween(secs[s].tasks, t, secs[s + 1].tasks, 0);
+      }),
     'task-dup': ({ s, t }) => api.change(() => g().sections[s].tasks.splice(t + 1, 0, copy(g().sections[s].tasks[t])), sel.task(s, t + 1)),
     'task-delete': ({ s, t }) => api.change(() => g().sections[s].tasks.splice(t, 1)),
   };
@@ -505,6 +521,19 @@ export function createGanttEditor(root, api) {
     } else {
       api.change(() => sec.tasks.splice(t + 1, 0, newTask(sec.tasks[t].type, 'prev')), sel.task(s, t + 1));
     }
+  });
+
+  // Drag tasks by their handle, also into another section
+  sortable(root, {
+    handle: '.drag-task',
+    item: '.gtask',
+    containerAt: (el) => el.closest('.group.section')?.querySelector('.gtasks') ?? null,
+    scroller: editorScroller,
+    onDrop: (item, container, index) => {
+      const { s, t } = locate(item);
+      const to = Number(container.closest('[data-gs]').dataset.gs);
+      api.change(() => moveBetween(g().sections[s].tasks, t, g().sections[to].tasks, index));
+    },
   });
 
   return { render, autosizeAll: () => root.querySelectorAll('textarea').forEach(autosize) };

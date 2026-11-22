@@ -5,6 +5,9 @@ software delivery – sprints, Program Increments (PIs), release trains and mile
 Diagrams are rendered with [Pele](https://pele.run), a fast, lightweight Mermaid renderer.
 
 - **Form-based editor**: sections (PI, quarter…) → periods (sprint, month…) → items (stories, releases…)
+- **Drag & drop** with the ⠿ handle (mouse and touch): move Gantt tasks and timeline periods to another section,
+  timeline items to another period. Without a mouse, ↑/↓ at the edge of a section moves an entry into the
+  neighbouring section; <kbd>Esc</kbd> cancels a drag.
 - **Live preview** rendered by Pele, horizontal (`LR`) or vertical (`TD`), with colour presets
 - **Responsive diagrams**: the preview re-lays out to the available width; on narrow screens a wide horizontal
   timeline switches to vertical automatically (toggle "Responsive"). Pinch/scroll zoom is built in.
@@ -119,6 +122,7 @@ js/themes.js        Pele colour presets (CSS variables)
 js/export.js        SVG / PNG download, clipboard
 js/svg-vars.js      resolves CSS variables to concrete colours for SVG export
 js/pele-css.js      CSS for the Pele playground (theme + Gantt colours)
+js/drag.js          drag & drop between lists (pointer events: mouse and touch)
 js/storage.js       localStorage autosave, share-link encoding
 js/app.js           UI wiring
 test/               node:test unit tests

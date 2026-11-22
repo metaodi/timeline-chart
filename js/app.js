@@ -2,7 +2,8 @@
 import { register, render, mount } from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/core.js';
 import timeline from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/diagrams/timeline.js';
 import gantt from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/diagrams/gantt.js';
-import { createGanttEditor } from './gantt-editor.js';
+import { createGanttEditor, editorScroller } from './gantt-editor.js';
+import { sortable, moveBetween } from './drag.js';
 import { styleGantt } from './gantt-style.js';
 import { peleCss } from './pele-css.js';
 import { emptyGantt, newGanttSection } from './gantt.js';
@@ -89,6 +90,10 @@ function change(mutator, focusSelector) {
 
 const periodsOf = (g) => (g === 'u' ? state.periods : state.sections[Number(g)].periods);
 
+/** Group keys in display order: "u" (without section, if shown) then the sections. */
+const groupKeys = () => [...(state.periods.length ? ['u'] : []), ...state.sections.map((_, i) => String(i))];
+const neighbourGroup = (g, d) => groupKeys()[groupKeys().indexOf(String(g)) + d] ?? null;
+
 function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 }
@@ -108,6 +113,7 @@ function kindSelect(text, label) {
 
 function eventHtml(g, p, e, text) {
   return `<li class="event kind-${getKind(text)}" data-e="${e}">
+    <span class="drag-handle drag-event" title="Drag to move – also to another period" aria-hidden="true">⠿</span>
     ${kindSelect(text, 'Item type')}
     <textarea rows="1" data-field="event" data-g="${g}" data-p="${p}" data-e="${e}" placeholder="Story, feature, milestone…">${esc(stripKind(text))}</textarea>
     <span class="tools">${iconBtn('event-up', 'Move up', '↑')}${iconBtn('event-down', 'Move down', '↓')}${iconBtn('event-delete', 'Delete item', '✕', 'del')}</span>
@@ -117,6 +123,7 @@ function eventHtml(g, p, e, text) {
 function periodHtml(g, p, period) {
   return `<div class="period" data-p="${p}">
     <div class="period-head kind-${getKind(period.label)}">
+      <span class="drag-handle drag-period" title="Drag to move – also to another section" aria-hidden="true">⠿</span>
       ${kindSelect(period.label, 'Period type')}
       <textarea rows="1" class="label" data-field="label" data-g="${g}" data-p="${p}" placeholder="Period, e.g. Sprint 1 / Jan / v1.2">${esc(stripKind(period.label))}</textarea>
       <span class="tools">${iconBtn('period-up', 'Move period up', '↑')}${iconBtn('period-down', 'Move period down', '↓')}${iconBtn('period-dup', 'Duplicate period', '⧉')}${iconBtn('period-delete', 'Delete period', '✕', 'del')}</span>
@@ -198,8 +205,19 @@ const actions = {
     const p = periodsOf(g).length;
     change(() => periodsOf(g).push(newPeriod()), sel.label(g, p));
   },
-  'period-up': ({ g, p }) => change(() => move(periodsOf(g), p, -1)),
-  'period-down': ({ g, p }) => change(() => move(periodsOf(g), p, 1)),
+  // at the edge of a section, ↑/↓ move the period into the neighbouring section
+  'period-up': ({ g, p }) =>
+    change(() => {
+      const prev = neighbourGroup(g, -1);
+      if (p > 0) move(periodsOf(g), p, -1);
+      else if (prev != null) moveBetween(periodsOf(g), 0, periodsOf(prev), periodsOf(prev).length);
+    }),
+  'period-down': ({ g, p }) =>
+    change(() => {
+      const next = neighbourGroup(g, 1);
+      if (p < periodsOf(g).length - 1) move(periodsOf(g), p, 1);
+      else if (next != null) moveBetween(periodsOf(g), p, periodsOf(next), 0);
+    }),
   'period-dup': ({ g, p }) => change(() => periodsOf(g).splice(p + 1, 0, clone(periodsOf(g)[p])), sel.label(g, p + 1)),
   'period-delete': ({ g, p }) => change(() => periodsOf(g).splice(p, 1)),
   'add-event': ({ g, p }) => {
@@ -691,6 +709,30 @@ async function boot() {
   tree.addEventListener('input', onTreeInput);
   tree.addEventListener('keydown', onTreeKeydown);
   tree.addEventListener('change', onTreeChange);
+  // Drag periods (also into another section) and items (also into another period)
+  sortable(tree, {
+    handle: '.drag-period',
+    item: '.period',
+    containerAt: (el) => el.closest('.group')?.querySelector('.periods') ?? null,
+    scroller: editorScroller,
+    onDrop: (item, container, index) => {
+      const from = item.closest('[data-g]').dataset.g;
+      const to = container.closest('[data-g]').dataset.g;
+      change(() => moveBetween(periodsOf(from), Number(item.dataset.p), periodsOf(to), index));
+    },
+  });
+  sortable(tree, {
+    handle: '.drag-event',
+    item: '.event',
+    containerAt: (el) => el.closest('.period')?.querySelector('.events') ?? null,
+    scroller: editorScroller,
+    onDrop: (item, container, index) => {
+      const { g, p, e } = locate(item);
+      const target = container.closest('.period');
+      const tg = target.closest('[data-g]').dataset.g;
+      change(() => moveBetween(periodsOf(g)[p].events, e, periodsOf(tg)[Number(target.dataset.p)].events, index));
+    },
+  });
   document.addEventListener('click', onAction);
   let resizeTimer;
   window.addEventListener('resize', () => {

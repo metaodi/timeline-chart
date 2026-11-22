@@ -445,3 +445,26 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
   .period-head [data-action='period-dup'],
   .group-head [data-action='section-dup'] { display: none; }
 }
+
+/* ---------------------------------------------------------------- drag & drop (js/drag.js) */
+
+.drag-handle {
+  flex: 0 0 auto; align-self: flex-start; width: 16px; height: 34px;
+  display: grid; place-items: center; color: var(--muted); opacity: 0.6;
+  cursor: grab; touch-action: none; user-select: none; font-size: 14px;
+}
+.drag-handle:hover { opacity: 1; }
+body.dragging, body.dragging * { cursor: grabbing !important; user-select: none; }
+.drag-source { opacity: 0.35; }
+.drag-ghost {
+  position: fixed; z-index: 100; pointer-events: none; margin: 0; list-style: none;
+  opacity: 0.92; box-shadow: 0 8px 24px rgb(0 0 0 / 18%); border-radius: 8px;
+  background: var(--surface-2);
+}
+.drop-marker { display: block; list-style: none; height: 3px; margin: -1px 0; border-radius: 2px; background: var(--accent); }
+/* empty lists stay reachable while dragging */
+body.dragging .gtasks, body.dragging .periods, body.dragging .events { min-height: 28px; }
+body.dragging .gtasks:empty, body.dragging .periods:empty, body.dragging .events:empty { outline: 1px dashed var(--border); border-radius: 6px; }
+@media (max-width: 720px) {
+  .drag-handle { width: 22px; height: 38px; opacity: 0.8; }
+}
