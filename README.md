@@ -8,6 +8,7 @@ Diagrams are rendered with [Pele](https://pele.run), a fast, lightweight Mermaid
 - **Live preview** rendered by Pele, horizontal (`LR`) or vertical (`TD`), with colour presets
 - **Responsive diagrams**: the preview re-lays out to the available width; on narrow screens a wide horizontal
   timeline switches to vertical automatically (toggle "Responsive"). Pinch/scroll zoom is built in.
+- **Two chart types**: *Timeline* (periods with items) and *Gantt* (bars that span several sprints)
 - **Sprint / PI generator**: start date, sprint length, sprints per PI, optional IP iteration, date labels
 - **Milestones & deadlines**: every item/period has a type (🏁 milestone, ⏰ deadline, 🚀 release, ⚠️ risk, ✅ done)
 - **Export**: download PNG or SVG (optionally transparent), copy the Mermaid code
@@ -16,6 +17,26 @@ Diagrams are rendered with [Pele](https://pele.run), a fast, lightweight Mermaid
 
 No build step and no dependencies: plain HTML, CSS and ES modules. Pele (core + the timeline diagram only) is loaded
 from jsDelivr. Exports are rendered separately at natural size, so a PNG saved on a phone is not squeezed.
+
+## Gantt mode
+
+For work that spans several sprints. Switch with **Timeline | Gantt** at the top of the editor; each mode keeps its own
+data.
+
+- **No date juggling**: you give at most one date – when the plan starts (defaults to next Monday). Every bar has a
+  **duration** (*sprints*, *weeks* or *working days*) and starts **after the previous bar** of its section. Optionally a
+  bar starts at the plan start, at a sprint, **after another task** (dependency) or on an exact date, or runs *until* a
+  sprint/date. The editor shows the computed dates under each bar.
+- **Sprint calendar** (*Sprints…*): sprint length, number of sprints, sprints per PI, IP iteration. The chart shows a
+  **PI row** and a **Sprint row** with all sprints side by side (`displayMode: compact`, no "staircase").
+- **Sections** (teams, epics, workstreams) contain **bars**, **milestones** ◆ and **deadlines** (vertical line).
+- **Status**: planned, in progress (outlined), done (faded), critical (red).
+- Change a duration or the plan start and everything that follows moves with it.
+- Bars are coloured like the timeline diagram: PIs and their sprints per PI, teams per section.
+
+The generated Mermaid code is a standard `gantt` chart with concrete dates, so it renders the same everywhere. The
+calendar is stored as a `%% sprint-calendar …` comment: importing the code restores sprint references, but durations
+and "after" rules come back as fixed sprints/dates. Share links and the browser autosave keep the full plan.
 
 ## Run locally
 
@@ -70,7 +91,10 @@ index.html          markup, dialogs
 css/style.css       layout (desktop two-column, phone tabs), light/dark
 js/model.js         data model, item types, Mermaid serialisation   ← start here to extend the syntax
 js/parser.js        Mermaid code → model (import)
-js/generator.js     sprint / PI generator
+js/generator.js     sprint / PI calendar and timeline generator
+js/gantt.js         Gantt model, Mermaid serialisation and import
+js/gantt-editor.js  Gantt editor UI
+js/gantt-style.js   colours Gantt bars like the timeline, shortens overflowing labels
 js/examples.js      built-in examples (add your own)
 js/themes.js        Pele colour presets (CSS variables)
 js/export.js        SVG / PNG download, clipboard

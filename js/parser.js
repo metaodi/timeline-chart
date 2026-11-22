@@ -3,6 +3,7 @@
  * Lenient on purpose: unknown lines are reported as warnings, not errors.
  */
 import { emptyTimeline, newPeriod, THEMES } from './model.js';
+import { parseGanttMermaid } from './gantt.js';
 
 /** Turn Mermaid text back into editor text: <br> -> newline, entity codes -> chars. */
 export function unescapeText(text) {
@@ -45,6 +46,14 @@ export function parseMermaid(code) {
   // %%{init: {"theme": "dark"}}%% directives
   const init = src.match(/%%\{\s*init:[\s\S]*?["']theme["']\s*:\s*["']([\w-]+)["']/);
   if (init && THEMES.includes(init[1])) t.theme = init[1];
+
+  // Gantt charts have their own parser; keep the timeline part of the state untouched.
+  const header = src.split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('%%'));
+  if (/^gantt\b/i.test(header ?? '')) {
+    const r = parseGanttMermaid(src);
+    Object.assign(t, { mode: 'gantt', gantt: r.gantt, title: r.title, accTitle: r.accTitle, accDescr: r.accDescr });
+    return { timeline: t, warnings: r.warnings };
+  }
 
   const lines = src.split('\n');
   let seenHeader = false;

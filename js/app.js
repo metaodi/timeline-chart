@@ -1,22 +1,33 @@
-// Pele renders Mermaid syntax to SVG (https://pele.run). Only the timeline diagram is loaded.
+// Pele renders Mermaid syntax to SVG (https://pele.run). Only the timeline and gantt diagrams are loaded.
 import { register, render, mount } from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/core.js';
 import timeline from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/diagrams/timeline.js';
+import gantt from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/diagrams/gantt.js';
+import { createGanttEditor } from './gantt-editor.js';
+import { styleGantt } from './gantt-style.js';
+import { emptyGantt, newGanttSection } from './gantt.js';
 import { toMermaid, normalize, isEmpty, newPeriod, newSection, THEMES, KINDS, getKind, stripKind, setKind } from './model.js';
 import { parseMermaid } from './parser.js';
 import { generateSprints } from './generator.js';
-import { EXAMPLES, DEFAULT_EXAMPLE } from './examples.js';
+import { EXAMPLES, DEFAULT_EXAMPLE, GANTT_EXAMPLE, nextMonday as nextMondayIso } from './examples.js';
 import { downloadSvg, downloadPng, copyText } from './export.js';
 import { PRESETS, themeVars, applyVars } from './themes.js';
 import { loadLocal, saveLocal, encodeShare, decodeShare } from './storage.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
+let ganttEditor = null; // created in boot()
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 // ---------------------------------------------------------------------------
 // State + undo history
 // ---------------------------------------------------------------------------
 
-let state = normalize(parseMermaid(EXAMPLES[DEFAULT_EXAMPLE]).timeline);
+/** An example's app state: Mermaid code is parsed, functions build a state directly. */
+const exampleState = (name) => {
+  const ex = EXAMPLES[name];
+  return typeof ex === 'function' ? ex() : parseMermaid(ex).timeline;
+};
+
+let state = normalize(exampleState(DEFAULT_EXAMPLE));
 const past = [];
 const future = [];
 let typingBurst = null;
@@ -59,7 +70,7 @@ function updateHistoryButtons() {
 function change(mutator, focusSelector) {
   snapshot();
   mutator(state);
-  renderTree();
+  renderEditor();
   update();
   if (focusSelector) {
     const el = $(focusSelector);
@@ -126,6 +137,11 @@ function groupHtml(g, title, periods, isSection) {
     <div class="periods">${periods.map((p, i) => periodHtml(g, i, p)).join('')}</div>
     <button type="button" class="btn small" data-action="add-period">+ Period (sprint, month…)</button>
   </div>`;
+}
+
+function renderEditor() {
+  if (state.mode === 'gantt') ganttEditor.render();
+  else renderTree();
 }
 
 function renderTree() {
@@ -256,6 +272,8 @@ function onTreeKeydown(ev) {
 // ---------------------------------------------------------------------------
 
 function renderSettings() {
+  document.body.dataset.mode = state.mode;
+  $$('input[name="mode"]').forEach((r) => (r.checked = r.value === state.mode));
   $('#title').value = state.title;
   $$('input[name="direction"]').forEach((r) => (r.checked = r.value === state.direction));
   $('#theme').value = state.theme;
@@ -274,6 +292,17 @@ function bindSettings() {
   $('#title').addEventListener('input', onText('title'));
   $('#accTitle').addEventListener('input', onText('accTitle'));
   $('#accDescr').addEventListener('input', onText('accDescr'));
+  $$('input[name="mode"]').forEach((r) =>
+    r.addEventListener('change', () => {
+      snapshot();
+      state.mode = r.value;
+      // First visit to Gantt mode: start from the example roadmap.
+      if (state.mode === 'gantt' && !state.gantt.sections.length && !state.gantt.calendar.startDate) {
+        state.gantt = normalize(exampleState(GANTT_EXAMPLE)).gantt;
+      }
+      refreshAll();
+    }),
+  );
   $$('input[name="direction"]').forEach((r) =>
     r.addEventListener('change', () => {
       snapshot();
@@ -297,7 +326,7 @@ function bindSettings() {
 // Preview
 // ---------------------------------------------------------------------------
 
-register(timeline);
+register(timeline, gantt);
 
 let renderTimer = null;
 let currentCode = '';
@@ -315,9 +344,14 @@ function update() {
 function previewOptions() {
   return {
     // On narrow screens Pele switches a too-wide horizontal timeline to vertical.
-    autoDirection: $('#responsive').checked,
+    autoDirection: state.mode === 'timeline' && $('#responsive').checked,
+    // Gantt bars get too short to label on narrow screens: keep the desktop
+    // layout and let it scale down (pinch/zoom for details) instead.
+    ...(state.mode === 'gantt' ? { maxWidth: Math.max(800, $('#preview').clientWidth - 32) } : {}),
     zoom: 'auto',
     onError: showError,
+    // Runs after every (re-)layout, including resizes.
+    onRender: () => styleGantt($('#preview svg.pele'), state),
   };
 }
 
@@ -359,6 +393,7 @@ function exportSvg() {
     const el = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
     const vars = themeVars(state.theme, state.disableMulticolor);
     applyVars(el, vars);
+    styleGantt(el, state);
     const background = $('#transparent').checked ? null : vars['--pele-bg'];
     return { el, background };
   } catch (err) {
@@ -387,15 +422,24 @@ function setView(view) {
   window.scrollTo({ top: 0 });
 }
 
+/** Load a timeline or gantt chart; the data of the other mode is kept. */
 function loadTimeline(t) {
   snapshot();
-  state = normalize(t);
+  const next = normalize(t);
+  if (next.mode === 'gantt') {
+    next.periods = state.periods;
+    next.sections = state.sections;
+    next.direction = state.direction;
+  } else {
+    next.gantt = state.gantt;
+  }
+  state = next;
   refreshAll();
 }
 
 function refreshAll() {
   renderSettings();
-  renderTree();
+  renderEditor();
   update();
 }
 
@@ -423,14 +467,34 @@ function bindDialogs() {
   // Generator
   const gen = $('#gen-dialog');
   const form = $('#gen-form');
-  $('#open-generator').addEventListener('click', () => {
+  const calendarFields = ['startDate', 'sprintWeeks', 'sprintCount', 'sprintsPerPI', 'firstSprint', 'firstPI', 'sprintPrefix', 'piPrefix'];
+  openGenerator = () => {
+    const isGantt = state.mode === 'gantt';
+    $('#gen-title').textContent = isGantt ? 'Sprint calendar' : 'Generate sprints & PIs';
+    $('#gen-ok').textContent = isGantt ? 'Apply' : 'Generate';
+    if (isGantt) {
+      const c = state.gantt.calendar;
+      calendarFields.forEach((k) => (form[k].value = c[k] ?? ''));
+      form.ipIteration.checked = Boolean(c.ipIteration);
+    }
     if (!form.startDate.value) form.startDate.value = nextMonday();
-    form.mode.value = isEmpty(state) ? 'replace' : 'append';
+    form.insert.value = isEmpty(state) ? 'replace' : 'append';
     gen.showModal();
-  });
+  };
+  $('#open-generator').addEventListener('click', () => openGenerator());
   form.addEventListener('submit', (ev) => {
     if (ev.submitter?.value !== 'ok') return;
     const f = new FormData(form);
+    if (state.mode === 'gantt') {
+      change((s) => {
+        const c = s.gantt.calendar;
+        calendarFields.forEach((k) => (c[k] = f.get(k)));
+        ['sprintWeeks', 'sprintCount', 'sprintsPerPI', 'firstSprint'].forEach((k) => (c[k] = Number(c[k])));
+        c.ipIteration = f.get('ipIteration') === 'on';
+      });
+      toast('Sprint calendar updated');
+      return;
+    }
     const sections = generateSprints({
       startDate: f.get('startDate'),
       sprintWeeks: Number(f.get('sprintWeeks')),
@@ -444,7 +508,7 @@ function bindDialogs() {
       ipIteration: f.get('ipIteration') === 'on',
     });
     change((s) => {
-      if (f.get('mode') === 'replace') {
+      if (f.get('insert') === 'replace') {
         s.sections = sections;
         s.periods = [];
       } else {
@@ -461,6 +525,8 @@ function bindDialogs() {
     });
   }
 }
+
+let openGenerator = () => {};
 
 function nextMonday() {
   const d = new Date();
@@ -481,15 +547,23 @@ function bindToolbar() {
   ex.insertAdjacentHTML('beforeend', Object.keys(EXAMPLES).map((k) => `<option>${esc(k)}</option>`).join(''));
   ex.addEventListener('change', () => {
     if (!ex.value) return;
-    loadTimeline(parseMermaid(EXAMPLES[ex.value]).timeline);
+    loadTimeline(exampleState(ex.value));
     ex.value = '';
     toast('Example loaded – undo to go back');
   });
 
   $('#clear').addEventListener('click', () => {
-    loadTimeline({ sections: [newSection()] });
-    toast('New timeline – undo to go back');
-    $(sel.section(0))?.focus();
+    if (state.mode === 'gantt') {
+      const g = { ...emptyGantt(), calendar: { ...state.gantt.calendar } };
+      if (!g.calendar.startDate) g.calendar.startDate = nextMondayIso();
+      g.sections = [newGanttSection()];
+      loadTimeline({ ...state, title: '', mode: 'gantt', gantt: g });
+      toast('New Gantt chart – undo to go back');
+    } else {
+      loadTimeline({ ...state, title: '', mode: 'timeline', periods: [], sections: [newSection()] });
+      toast('New timeline – undo to go back');
+      $(sel.section(0))?.focus();
+    }
   });
 
   $('#share').addEventListener('click', async () => {
@@ -549,6 +623,14 @@ async function boot() {
     const saved = loadLocal();
     if (saved) state = normalize(saved);
   }
+  ganttEditor = createGanttEditor($('#gantt-editor'), {
+    getState: () => state,
+    change,
+    snapshot,
+    snapshotTyping,
+    update,
+    openCalendar: () => openGenerator(),
+  });
   bindSettings();
   bindToolbar();
   bindDialogs();
@@ -557,7 +639,7 @@ async function boot() {
   tree.addEventListener('keydown', onTreeKeydown);
   tree.addEventListener('change', onTreeChange);
   document.addEventListener('click', onAction);
-  window.addEventListener('resize', () => $$('#tree textarea').forEach(autosize));
+  window.addEventListener('resize', () => $$('#tree textarea, #gantt-editor textarea').forEach(autosize));
   refreshAll();
 }
 

@@ -30,6 +30,9 @@
  * Line breaks inside any text are stored as "\n" and written as <br>.
  */
 
+import { emptyGantt, normalizeGantt, toGanttMermaid, isGanttEmpty } from './gantt.js';
+
+export const MODES = ['timeline', 'gantt'];
 export const DIRECTIONS = ['LR', 'TD'];
 export const THEMES = ['default', 'neutral', 'dark', 'forest', 'base'];
 
@@ -70,6 +73,7 @@ export function setKind(text, kindId) {
 
 export function emptyTimeline() {
   return {
+    mode: 'timeline', // 'timeline' | 'gantt' (see gantt.js)
     title: '',
     direction: 'LR',
     theme: 'default',
@@ -78,6 +82,7 @@ export function emptyTimeline() {
     accDescr: '',
     periods: [],
     sections: [],
+    gantt: emptyGantt(),
   };
 }
 
@@ -93,6 +98,8 @@ export function newSection(name = '') {
 export function normalize(data) {
   const base = emptyTimeline();
   const d = { ...base, ...(data || {}) };
+  if (!MODES.includes(d.mode)) d.mode = base.mode;
+  d.gantt = normalizeGantt(d.gantt);
   if (!DIRECTIONS.includes(d.direction)) d.direction = base.direction;
   if (!THEMES.includes(d.theme)) d.theme = base.theme;
   d.disableMulticolor = Boolean(d.disableMulticolor);
@@ -153,7 +160,9 @@ function escapeLine(text) {
 function frontmatter(t) {
   const out = [];
   if (t.theme !== 'default') out.push(`  theme: ${t.theme}`);
-  if (t.disableMulticolor) out.push('  timeline:', '    disableMulticolor: true');
+  if (t.disableMulticolor && t.mode === 'timeline') out.push('  timeline:', '    disableMulticolor: true');
+  // Compact: bars that don't overlap share a row, so sprints sit side by side instead of a "staircase".
+  if (t.mode === 'gantt') out.push('  gantt:', '    displayMode: compact');
   return out.length ? ['---', 'config:', ...out, '---'] : [];
 }
 
@@ -169,6 +178,7 @@ function periodLines(period, indent) {
 /** Convert the model into Mermaid timeline code. */
 export function toMermaid(data) {
   const t = normalize(data);
+  if (t.mode === 'gantt') return toGanttMermaid(t, frontmatter(t));
   const out = [...frontmatter(t)];
   out.push(t.direction === 'LR' ? 'timeline' : `timeline ${t.direction}`);
   if (t.title.trim()) out.push(`  title ${escapeLine(t.title)}`);
@@ -193,6 +203,7 @@ export function toMermaid(data) {
 /** True if the timeline has nothing Mermaid could draw. */
 export function isEmpty(data) {
   const t = normalize(data);
+  if (t.mode === 'gantt') return isGanttEmpty(t.gantt);
   const hasPeriod = (ps) => ps.some((p) => p.label.trim() || p.events.some((e) => e.trim()));
   return !hasPeriod(t.periods) && !t.sections.some((s) => hasPeriod(s.periods));
 }
