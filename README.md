@@ -45,6 +45,11 @@ data.
 - **Sections** (teams, epics, workstreams) contain **bars**, **milestones** ◆ and **deadlines** (vertical line).
   Milestones close to each other get their own rows: in the code a milestone is written as a range as wide as its
   label, centred on its date (Pele draws the diamond in the middle), so the compact layout sees them overlap.
+- **Notes** (📝): keep names short and put details in a note. Every entry shows a **tooltip** on hover (name, dates,
+  note, link) in the preview and in exported SVGs. With *Notes below chart* entries get a number (¹) and the notes are
+  listed under the chart – visible in PNGs and prints too. URLs in notes become links.
+- **Links** (🔗): an entry becomes clickable (Mermaid `click <id> href "…"`, so it works in other Mermaid tools too) and
+  is marked with ↗; links open in a new tab. Notes are kept in the code as a `%% notes …` comment.
 - **Status**: planned, in progress (outlined), done (faded), critical (red).
 - Change a duration or the plan start and everything that follows moves with it.
 - **Row stripes**: the alternating row colours are configurable next to the plan start – *Standard* (grey / none),
@@ -127,6 +132,7 @@ js/svg-vars.js      resolves CSS variables to concrete colours for SVG export
 js/pele-css.js      CSS for the Pele playground (theme + Gantt colours)
 js/drag.js          drag & drop between lists (pointer events: mouse and touch)
 js/svg-title.js     left-aligned diagram title
+js/gantt-notes.js   tooltips, numbered notes below the chart, link markers
 js/storage.js       localStorage autosave, share-link encoding
 js/app.js           UI wiring
 test/               node:test unit tests

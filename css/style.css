@@ -468,3 +468,17 @@ body.dragging .gtasks:empty, body.dragging .periods:empty, body.dragging .events
 @media (max-width: 720px) {
   .drag-handle { width: 22px; height: 38px; opacity: 0.8; }
 }
+
+/* ---------------------------------------------------------------- notes (gantt-notes.js) */
+
+.gnote {
+  margin: 2px 0 0 34px; width: calc(100% - 34px); min-height: 32px; padding: 4px 8px; resize: none; overflow: hidden;
+  font-size: 0.85rem; line-height: 1.35; color: var(--text);
+  border: 1px dashed var(--border); border-radius: 6px; background: var(--surface);
+}
+.gnote:focus { border-style: solid; border-color: var(--accent); outline: none; }
+.glink { display: block; color: var(--accent); }
+.ibtn.has-note { opacity: 1; color: var(--accent); }
+@media (max-width: 720px) {
+  .gnote { margin-left: 4px; width: calc(100% - 4px); font-size: 16px; }
+}

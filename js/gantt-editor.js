@@ -110,13 +110,17 @@ export function createGanttEditor(root, api) {
         <textarea rows="1" data-gfield="name" data-gs="${s}" data-gt="${t}" placeholder="${placeholder}">${esc(task.name)}</textarea>
         <span class="tools">${iconBtn('task-up', 'Move up', '↑')}${iconBtn('task-down', 'Move down', '↓')}${iconBtn('task-dup', 'Duplicate', '⧉')}${iconBtn('task-delete', 'Delete', '✕', 'del')}</span>
       </div>
-      <div class="gtask-when">${when}${status}</div>
+      <div class="gtask-when">${when}${status}${iconBtn('note', task.note?.trim() ? 'Edit note' : 'Add a note (hover + below the chart)', '📝', task.note?.trim() ? 'has-note' : '')}${iconBtn('link', task.link ? 'Edit link' : 'Add a link (the entry becomes clickable)', '🔗', task.link ? 'has-note' : '')}</div>
+      ${noteOpen.has(task.id) || task.note?.trim() ? `<textarea rows="1" class="gnote" data-gfield="note" data-gs="${s}" data-gt="${t}" placeholder="Note – shown on hover and below the chart; URLs become links">${esc(task.note ?? '')}</textarea>` : ''}
+      ${linkOpen.has(task.id) || task.link ? `<input type="url" class="gnote glink" data-gfield="link" data-gs="${s}" data-gt="${t}" value="${esc(task.link ?? '')}" placeholder="https://… – opens when the entry is clicked" inputmode="url" />` : ''}
       <div class="gtask-dates">${describe(sched.dates[s][t], task.type)}</div>
     </li>`;
   }
 
   let planOpen = false; // remember whether the PI/sprint list is expanded
   let paletteOpen = -1; // section whose colour palette is shown
+  const noteOpen = new Set(); // task ids whose (still empty) note field is shown
+  const linkOpen = new Set(); // task ids whose (still empty) link field is shown
 
   const colourOf = (k) => themeVars(api.getState().theme)[`--pele-series-${k}`];
 
@@ -206,7 +210,7 @@ export function createGanttEditor(root, api) {
           <button type="button" class="btn small" data-gaction="pi-add">+ PI</button>
         </div>
       </details>
-      <div class="gcal-opts">${opt('showPIs', 'Show PIs')}${opt('showSprints', 'Show sprints')}</div>
+      <div class="gcal-opts">${opt('showPIs', 'Show PIs')}${opt('showSprints', 'Show sprints')}${opt('showNotes', 'Notes below chart')}</div>
       ${rowsHtml()}
     </div>`;
   }
@@ -319,6 +323,22 @@ export function createGanttEditor(root, api) {
   }
   const actions = {
     calendar: () => api.openCalendar(),
+    link: ({ s, t }) => {
+      const sel = `[data-gfield="link"][data-gs="${s}"][data-gt="${t}"]`;
+      if (!root.querySelector(sel)) {
+        linkOpen.add(g().sections[s].tasks[t].id);
+        render();
+      }
+      root.querySelector(sel)?.focus();
+    },
+    note: ({ s, t }) => {
+      const task = g().sections[s].tasks[t];
+      const field = root.querySelector(`[data-gfield="note"][data-gs="${s}"][data-gt="${t}"]`);
+      if (field) return field.focus();
+      noteOpen.add(task.id);
+      render();
+      root.querySelector(`[data-gfield="note"][data-gs="${s}"][data-gt="${t}"]`)?.focus();
+    },
     palette: ({ s }) => {
       paletteOpen = paletteOpen === s ? -1 : s;
       render();
@@ -421,6 +441,7 @@ export function createGanttEditor(root, api) {
     const { s, t } = locate(el);
     if (field === 'section') g().sections[s].name = el.value;
     else if (field === 'name') g().sections[s].tasks[t].name = el.value;
+    else if (field === 'note') g().sections[s].tasks[t].note = el.value;
     api.update();
   });
 
@@ -475,6 +496,12 @@ export function createGanttEditor(root, api) {
         case 'status':
           task.status = el.value;
           break;
+        case 'link': {
+          // add https:// to bare addresses like "jira.example.com/ABC-1"
+          const v = el.value.trim();
+          task.link = !v || /^[a-z][a-z0-9+.-]*:/i.test(v) ? v : `https://${v}`;
+          break;
+        }
         case 'from':
           // "Exact date…" starts from the currently computed date
           task.from = el.value === 'date' ? isoDate(when?.start ?? sched.planStart ?? new Date()) : el.value;
@@ -511,7 +538,7 @@ export function createGanttEditor(root, api) {
       actions['sp-add'](locate(el));
       return;
     }
-    if (ev.key !== 'Enter' || ev.isComposing || el.tagName !== 'TEXTAREA') return;
+    if (ev.key !== 'Enter' || ev.isComposing || el.tagName !== 'TEXTAREA' || el.dataset.gfield === 'note') return;
     ev.preventDefault();
     const { s, t } = locate(el);
     const sec = g().sections[s];
