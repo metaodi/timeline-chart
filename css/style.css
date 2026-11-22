@@ -315,6 +315,15 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
   padding: 16px;
 }
 .preview svg { display: block; margin: 0 auto; }
+/* Desktop: Gantt charts keep their full width and scroll horizontally. */
+@media (min-width: 721px) {
+  .preview svg.pele-gantt { max-width: none !important; margin: 0; }
+}
+/* Wide view (desktop): the chart gets the whole width, the editor is hidden. */
+@media (min-width: 721px) {
+  body.wide .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'preview' 'code'; }
+  body.wide .editor-pane { display: none; }
+}
 .placeholder { text-align: center; margin-top: 80px; }
 
 .error {
@@ -365,6 +374,7 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
 /* ---------------------------------------------------------------- phone: one view at a time, bottom tab bar */
 
 @media (max-width: 720px) {
+  .desktop-only { display: none !important; }
   :root { --tabbar-h: 58px; }
 
   .topbar { position: static; padding: 8px 12px; gap: 8px; }

@@ -303,10 +303,26 @@ export function taskLine(task, when, id = '') {
 }
 
 /** @param {object} t full app state (title, accTitle, accDescr, theme, gantt) */
+/**
+ * Chart width (Mermaid `useWidth`): about 40px per week, so long plans get wider
+ * instead of cramped. Between 1000 and 4000px.
+ */
+export function ganttWidth(cal, dates) {
+  const all = [...cal.sprints, ...dates.flat().filter(Boolean)];
+  if (!all.length) return 1000;
+  const start = Math.min(...all.map((d) => d.start.getTime()));
+  const end = Math.max(...all.map((d) => d.end.getTime()));
+  const weeks = (end - start) / (7 * 864e5) + 1;
+  return Math.max(1000, Math.min(4000, Math.round((260 + weeks * 40) / 10) * 10));
+}
+
 export function toGanttMermaid(t, frontmatter = []) {
   const g = normalizeGanttShallow(t.gantt);
   const { cal, dates } = scheduleGantt(g);
-  const out = [...frontmatter, 'gantt'];
+  const fm = [...frontmatter];
+  const at = fm.indexOf('    displayMode: compact');
+  if (at >= 0) fm.splice(at + 1, 0, `    useWidth: ${ganttWidth(cal, dates)}`);
+  const out = [...fm, 'gantt'];
   if (t.title?.trim()) out.push(`  title ${t.title.replace(/\s*\n\s*/g, ' ').trim()}`);
   if (t.accTitle?.trim()) out.push(`  accTitle: ${t.accTitle.trim()}`);
   if (t.accDescr?.trim()) out.push(`  accDescr: ${t.accDescr.replace(/\s*\n\s*/g, ' ').trim()}`);

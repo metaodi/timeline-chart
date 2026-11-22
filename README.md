@@ -37,6 +37,9 @@ data.
 - **Sections** (teams, epics, workstreams) contain **bars**, **milestones** ◆ and **deadlines** (vertical line).
 - **Status**: planned, in progress (outlined), done (faded), critical (red).
 - Change a duration or the plan start and everything that follows moves with it.
+- **Width**: the chart width grows with the plan (about 40px per week, 1000–4000px, Mermaid `useWidth`). On desktop
+  the preview shows it at full width and scrolls horizontally; **⤢ Wide** hides the editor so the chart can use the
+  whole window. On phones it scales down (zoom for details).
 - **Colours**: PIs are black and sprints grey (in dark themes: light), so colour is left to the sections. Each section
   (e.g. a category of work) has its own colour: automatic (never red, which means *critical*) or chosen with the
   colour dot in the section header.

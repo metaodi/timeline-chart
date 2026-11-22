@@ -346,9 +346,9 @@ function previewOptions() {
   return {
     // On narrow screens Pele switches a too-wide horizontal timeline to vertical.
     autoDirection: state.mode === 'timeline' && $('#responsive').checked,
-    // Gantt bars get too short to label on narrow screens: keep the desktop
-    // layout and let it scale down (pinch/zoom for details) instead.
-    ...(state.mode === 'gantt' ? { maxWidth: Math.max(800, $('#preview').clientWidth - 32) } : {}),
+    // Gantt: always lay out at the chart's own width (useWidth in the code). On
+    // desktop it scrolls horizontally, on phones it scales down (zoom for details).
+    ...(state.mode === 'gantt' ? { maxWidth: 4000 } : {}),
     zoom: 'auto',
     onError: showError,
     // Runs after every (re-)layout, including resizes.
@@ -372,12 +372,20 @@ function renderPreview() {
     preview.innerHTML = '<p class="muted placeholder">Add a period to see the timeline.</p>';
     return;
   }
+  const code = previewCode();
   if (!mounted) {
     preview.innerHTML = '';
-    mounted = mount(preview, currentCode, previewOptions());
+    mounted = mount(preview, code, previewOptions());
   } else {
-    mounted.update(currentCode, previewOptions());
+    mounted.update(code, previewOptions());
   }
+}
+
+/** On desktop a Gantt chart fills at least the preview width (e.g. in the wide view). */
+function previewCode() {
+  if (state.mode !== 'gantt' || matchMedia('(max-width: 720px)').matches) return currentCode;
+  const available = $('#preview').clientWidth - 34;
+  return currentCode.replace(/useWidth: (\d+)/, (_, w) => `useWidth: ${Math.max(Number(w), available)}`);
 }
 
 /**
@@ -609,6 +617,24 @@ function bindToolbar() {
     }
   });
   $('#responsive').addEventListener('change', renderPreview);
+  // Wide view: hide the editor so the chart can use the full width.
+  const setWide = (on) => {
+    document.body.classList.toggle('wide', on);
+    $('#wide').setAttribute('aria-pressed', String(on));
+    $('#wide').textContent = on ? '⤡ Editor' : '⤢ Wide';
+    if (currentCode) renderPreview();
+    try {
+      localStorage.setItem('timeline-builder:wide', on ? '1' : '');
+    } catch {
+      /* optional */
+    }
+  };
+  $('#wide').addEventListener('click', () => setWide(!document.body.classList.contains('wide')));
+  try {
+    if (localStorage.getItem('timeline-builder:wide')) setWide(true);
+  } catch {
+    /* optional */
+  }
 
   $$('.tabbar button').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
 }
@@ -645,7 +671,13 @@ async function boot() {
   tree.addEventListener('keydown', onTreeKeydown);
   tree.addEventListener('change', onTreeChange);
   document.addEventListener('click', onAction);
-  window.addEventListener('resize', () => $$('#tree textarea, #gantt-editor textarea').forEach(autosize));
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    $$('#tree textarea, #gantt-editor textarea').forEach(autosize);
+    // a Gantt chart fills the preview width, so lay it out again
+    clearTimeout(resizeTimer);
+    if (state.mode === 'gantt') resizeTimer = setTimeout(renderPreview, 200);
+  });
   refreshAll();
 }
 
