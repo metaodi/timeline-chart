@@ -11,16 +11,23 @@
  *   sections: [{ name, tasks: Task[] }],
  * }
  * Task = {
+ *   id: string,          // stable id, used by "after:<id>"
  *   name: string,
  *   type: 'task' | 'milestone' | 'deadline',
  *   status: '' | 'done' | 'active' | 'crit',
- *   from: Ref,   // start (unused for milestones/deadlines)
- *   to: Ref,     // end, or the date of a milestone/deadline
+ *   from: Start,         // where a bar starts / where a milestone or deadline sits
+ *   duration: string,    // "2s" sprints, "3w" weeks, "10d" working days; "" = until `to`
+ *   to: Ref,             // end when no duration is given
  * }
- * Ref = "s3" (sprint id from the calendar: start or end of that sprint) or "YYYY-MM-DD".
+ * Start = "prev"        after the previous task of the same section (default)
+ *       | "plan"        at the plan start (calendar start date)
+ *       | "after:<id>"  after another task
+ *       | Ref
+ * Ref   = "s3" (a sprint of the calendar) or "YYYY-MM-DD".
  *
- * Referencing sprints keeps the plan in sync with the calendar: moving the
- * start date or changing the sprint length moves every task with it.
+ * Concrete dates are computed here (`scheduleGantt`), so the user only gives
+ * durations and, at most, a start date for the whole plan. Changing the
+ * calendar or a duration moves everything that follows.
  */
 import { DEFAULT_CALENDAR, sprintCalendar, parseDate, isoDate, addDays } from './generator.js';
 
@@ -52,11 +59,19 @@ export function emptyGantt() {
   };
 }
 
-export function newTask(from = 's1', to = from, type = 'task') {
-  return { name: '', type, status: '', from, to };
+export const DURATION_UNITS = [
+  { id: 's', one: 'sprint', many: 'sprints' },
+  { id: 'w', one: 'week', many: 'weeks' },
+  { id: 'd', one: 'working day', many: 'working days' },
+];
+
+export const newId = () => 't' + Math.random().toString(36).slice(2, 8);
+
+export function newTask(type = 'task', from = 'prev', duration = '1s') {
+  return { id: newId(), name: '', type, status: '', from, duration: type === 'task' ? duration : '', to: '' };
 }
 
-export function newGanttSection(name = '', task = newTask()) {
+export function newGanttSection(name = '', task = newTask('task', 'plan')) {
   return { name, tasks: [task] };
 }
 
@@ -72,11 +87,13 @@ export function normalizeGantt(g) {
         name: String(s?.name ?? ''),
         tasks: Array.isArray(s?.tasks)
           ? s.tasks.map((t) => ({
+              id: typeof t?.id === 'string' && t.id ? t.id : newId(),
               name: String(t?.name ?? ''),
               type: types.includes(t?.type) ? t.type : 'task',
               status: statuses.includes(t?.status) ? t.status : '',
-              from: String(t?.from ?? ''),
-              to: String(t?.to ?? t?.from ?? ''),
+              from: String(t?.from || 'prev'),
+              duration: /^\d+[swd]$/.test(t?.duration ?? '') ? t.duration : '',
+              to: String(t?.to ?? ''),
             }))
           : [],
       }))
@@ -92,6 +109,91 @@ export function calendarOf(g) {
   } catch {
     return { sprints: [], pis: [] };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Scheduling: turn starts + durations into concrete dates
+// ---------------------------------------------------------------------------
+
+const isWeekend = (d) => d.getUTCDay() === 0 || d.getUTCDay() === 6;
+/** The date itself, or the following Monday if it falls on a weekend. */
+export const workday = (d) => (isWeekend(d) ? workday(addDays(d, 1)) : d);
+const nextWorkday = (d) => workday(addDays(d, 1));
+const lastWorkday = (d) => (isWeekend(d) ? lastWorkday(addDays(d, -1)) : d);
+
+/** Inclusive end of a task starting on `start` lasting `duration` ("2s", "3w", "10d"). */
+export function endFor(start, duration, g, cal) {
+  const m = /^(\d+)([swd])$/.exec(duration);
+  if (!m) return null;
+  const n = Math.max(1, Number(m[1]));
+  if (m[2] === 'd') {
+    let d = workday(start);
+    for (let i = 1; i < n; i++) d = nextWorkday(d);
+    return d;
+  }
+  if (m[2] === 's') {
+    // Aligned with a sprint start: end with the n-th sprint (IP iterations count as sprints).
+    const i = cal.sprints.findIndex((sp) => sp.start.getTime() === start.getTime());
+    if (i >= 0 && cal.sprints[i + n - 1]) return cal.sprints[i + n - 1].end;
+    return lastWorkday(addDays(start, n * 7 * (Number(g.calendar.sprintWeeks) || 2) - 1));
+  }
+  return lastWorkday(addDays(start, n * 7 - 1));
+}
+
+/**
+ * Compute start/end dates of every task.
+ * @returns {{ cal, planStart: Date|null, dates: ({start: Date, end: Date}|null)[][] }}
+ *   dates[section][task]; null when a task cannot be placed (e.g. no plan start).
+ */
+export function scheduleGantt(gantt) {
+  const g = normalizeGanttShallow(gantt);
+  const cal = calendarOf(g);
+  const planStart = isDate(g.calendar.startDate) ? workday(parseDate(g.calendar.startDate)) : null;
+  const where = new Map(); // id -> [si, ti]
+  g.sections.forEach((s, si) => s.tasks.forEach((t, ti) => where.set(t.id, [si, ti])));
+  const dates = g.sections.map((s) => s.tasks.map(() => undefined));
+  const visiting = new Set();
+
+  const place = (si, ti) => {
+    if (dates[si][ti] !== undefined) return dates[si][ti];
+    const t = g.sections[si].tasks[ti];
+    if (visiting.has(t.id)) return null; // circular "after" chain
+    visiting.add(t.id);
+    const point = t.type !== 'task';
+    const endOf = (pos) => (pos ? place(...pos)?.end ?? null : null);
+    let start = null;
+    const f = t.from;
+    if (f === 'prev') {
+      const prevEnd = ti > 0 ? endOf([si, ti - 1]) : null;
+      start = ti > 0 ? (prevEnd && (point ? prevEnd : nextWorkday(prevEnd))) : planStart;
+    } else if (f === 'plan') {
+      start = planStart;
+    } else if (f.startsWith('after:')) {
+      const e = endOf(where.get(f.slice(6)));
+      start = e && (point ? e : nextWorkday(e));
+    } else {
+      start = resolveRef(f, point ? 'end' : 'start', cal);
+      if (start && !point) start = workday(start);
+    }
+    let result = null;
+    if (start && point) {
+      result = { start, end: start };
+    } else if (start) {
+      let end = t.duration ? endFor(start, t.duration, g, cal) : resolveRef(t.to, 'end', cal);
+      if (end && end < start) end = start;
+      result = end ? { start, end } : null;
+    }
+    visiting.delete(t.id);
+    dates[si][ti] = result;
+    return result;
+  };
+  g.sections.forEach((s, si) => s.tasks.forEach((_, ti) => place(si, ti)));
+  return { cal, planStart, dates };
+}
+
+/** normalizeGantt without regenerating ids (scheduling must see the caller's ids). */
+function normalizeGanttShallow(g) {
+  return g?.calendar && Array.isArray(g.sections) ? g : normalizeGantt(g);
 }
 
 /** Resolve a Ref to a Date. `edge` = 'start' | 'end' picks the sprint's first or last day. */
@@ -132,31 +234,24 @@ function calendarComment(c) {
 }
 
 /**
- * One task line, or null if its dates cannot be resolved.
+ * One task line from scheduled dates, or null if the task could not be placed.
  * `id` (e.g. "g0t2") lets gantt-style.js colour the bar by its section.
  */
-export function taskLine(task, cal, id = '') {
+export function taskLine(task, when, id = '') {
+  if (!when) return null;
   const name = escapeGanttText(task.name) || '&nbsp;';
   const tags = [];
   if (task.type === 'milestone') tags.push('milestone');
   if (task.type === 'deadline') tags.push('vert');
   if (task.status) tags.push(task.status);
-  if (task.type !== 'task') {
-    const at = resolveRef(task.to || task.from, 'end', cal);
-    if (!at) return null;
-    return `    ${name} : ${[...tags, id, isoDate(at), '0d'].filter(Boolean).join(', ')}`;
-  }
-  let start = resolveRef(task.from, 'start', cal);
-  let end = resolveRef(task.to, 'end', cal);
-  if (!start || !end) return null;
-  if (end < start) [start, end] = [resolveRef(task.to, 'start', cal) ?? end, resolveRef(task.from, 'end', cal) ?? start];
-  return `    ${name} : ${[...tags, id, isoDate(start), isoDate(end)].filter(Boolean).join(', ')}`;
+  const dates = task.type === 'task' ? [isoDate(when.start), isoDate(when.end)] : [isoDate(when.start), '0d'];
+  return `    ${name} : ${[...tags, id, ...dates].filter(Boolean).join(', ')}`;
 }
 
 /** @param {object} t full app state (title, accTitle, accDescr, theme, gantt) */
 export function toGanttMermaid(t, frontmatter = []) {
-  const g = normalizeGantt(t.gantt);
-  const cal = calendarOf(g);
+  const g = normalizeGanttShallow(t.gantt);
+  const { cal, dates } = scheduleGantt(g);
   const out = [...frontmatter, 'gantt'];
   if (t.title?.trim()) out.push(`  title ${t.title.replace(/\s*\n\s*/g, ' ').trim()}`);
   if (t.accTitle?.trim()) out.push(`  accTitle: ${t.accTitle.trim()}`);
@@ -179,15 +274,14 @@ export function toGanttMermaid(t, frontmatter = []) {
     }
   }
   g.sections.forEach((s, si) => {
-    const lines = s.tasks.map((task, ti) => taskLine(task, cal, `g${si}t${ti}`)).filter(Boolean);
+    const lines = s.tasks.map((task, ti) => taskLine(task, dates[si][ti], `g${si}t${ti}`)).filter(Boolean);
     out.push(`  section ${escapeGanttText(s.name) || '&nbsp;'}`, ...lines);
   });
   return out.join('\n') + '\n';
 }
 
 export function isGanttEmpty(g) {
-  const cal = calendarOf(normalizeGantt(g));
-  return !(g?.sections ?? []).some((s) => s.tasks.some((t) => taskLine(t, cal)));
+  return !scheduleGantt(g).dates.some((row) => row.some(Boolean));
 }
 
 // ---------------------------------------------------------------------------
@@ -276,7 +370,7 @@ export function parseGanttMermaid(code) {
       } else if ((m = line.match(/^([^:]+):(.*)$/))) {
         const name = unescape(m[1]);
         const parts = m[2].split(',').map((p) => p.trim()).filter(Boolean);
-        const task = { name, type: 'task', status: '', from: '', to: '' };
+        const task = { id: newId(), name, type: 'task', status: '', from: '', duration: '', to: '' };
         while (parts.length && /^(done|active|crit|milestone|vert)$/.test(parts[0])) {
           const tag = parts.shift();
           if (tag === 'milestone') task.type = 'milestone';
@@ -316,8 +410,8 @@ export function parseGanttMermaid(code) {
           else g.showSprints = true;
         }
         if (generated) return;
-        task.from = isoDate(start);
-        task.to = isoDate(end);
+        task.from = isoDate(task.type === 'task' ? start : end);
+        task.to = task.type === 'task' ? isoDate(end) : '';
         if (!section) {
           section = { name: '', tasks: [] };
           g.sections.push(section);
@@ -344,10 +438,8 @@ export function snapToSprints(g) {
       if (t.type === 'task') {
         if (byStart.has(t.from)) t.from = byStart.get(t.from);
         if (byEnd.has(t.to)) t.to = byEnd.get(t.to);
-      } else if (byEnd.has(t.to)) {
-        t.to = t.from = byEnd.get(t.to);
-      } else {
-        t.from = t.to;
+      } else if (byEnd.has(t.from)) {
+        t.from = byEnd.get(t.from);
       }
     }
   }

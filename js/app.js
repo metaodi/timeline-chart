@@ -4,11 +4,11 @@ import timeline from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/diagrams
 import gantt from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/diagrams/gantt.js';
 import { createGanttEditor } from './gantt-editor.js';
 import { styleGantt } from './gantt-style.js';
-import { emptyGantt, newGanttSection, newTask, calendarOf } from './gantt.js';
+import { emptyGantt, newGanttSection } from './gantt.js';
 import { toMermaid, normalize, isEmpty, newPeriod, newSection, THEMES, KINDS, getKind, stripKind, setKind } from './model.js';
 import { parseMermaid } from './parser.js';
 import { generateSprints } from './generator.js';
-import { EXAMPLES, DEFAULT_EXAMPLE, GANTT_EXAMPLE } from './examples.js';
+import { EXAMPLES, DEFAULT_EXAMPLE, GANTT_EXAMPLE, nextMonday as nextMondayIso } from './examples.js';
 import { downloadSvg, downloadPng, copyText } from './export.js';
 import { PRESETS, themeVars, applyVars } from './themes.js';
 import { loadLocal, saveLocal, encodeShare, decodeShare } from './storage.js';
@@ -21,7 +21,13 @@ const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 // State + undo history
 // ---------------------------------------------------------------------------
 
-let state = normalize(parseMermaid(EXAMPLES[DEFAULT_EXAMPLE]).timeline);
+/** An example's app state: Mermaid code is parsed, functions build a state directly. */
+const exampleState = (name) => {
+  const ex = EXAMPLES[name];
+  return typeof ex === 'function' ? ex() : parseMermaid(ex).timeline;
+};
+
+let state = normalize(exampleState(DEFAULT_EXAMPLE));
 const past = [];
 const future = [];
 let typingBurst = null;
@@ -292,7 +298,7 @@ function bindSettings() {
       state.mode = r.value;
       // First visit to Gantt mode: start from the example roadmap.
       if (state.mode === 'gantt' && !state.gantt.sections.length && !state.gantt.calendar.startDate) {
-        state.gantt = parseMermaid(EXAMPLES[GANTT_EXAMPLE]).timeline.gantt;
+        state.gantt = normalize(exampleState(GANTT_EXAMPLE)).gantt;
       }
       refreshAll();
     }),
@@ -541,7 +547,7 @@ function bindToolbar() {
   ex.insertAdjacentHTML('beforeend', Object.keys(EXAMPLES).map((k) => `<option>${esc(k)}</option>`).join(''));
   ex.addEventListener('change', () => {
     if (!ex.value) return;
-    loadTimeline(parseMermaid(EXAMPLES[ex.value]).timeline);
+    loadTimeline(exampleState(ex.value));
     ex.value = '';
     toast('Example loaded – undo to go back');
   });
@@ -549,8 +555,8 @@ function bindToolbar() {
   $('#clear').addEventListener('click', () => {
     if (state.mode === 'gantt') {
       const g = { ...emptyGantt(), calendar: { ...state.gantt.calendar } };
-      const first = calendarOf(g).sprints[0]?.id ?? new Date().toISOString().slice(0, 10);
-      g.sections = [newGanttSection('', newTask(first, first))];
+      if (!g.calendar.startDate) g.calendar.startDate = nextMondayIso();
+      g.sections = [newGanttSection()];
       loadTimeline({ ...state, title: '', mode: 'gantt', gantt: g });
       toast('New Gantt chart – undo to go back');
     } else {

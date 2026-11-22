@@ -256,18 +256,23 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
 .gcal-opts { display: flex; gap: 16px; flex-wrap: wrap; }
 .gtasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
 .gtask { background: var(--surface-2); border-radius: 8px; padding: 4px 6px 6px; display: grid; gap: 2px; grid-template-columns: minmax(0, 1fr); min-width: 0; }
-.gtask-when > *, .ref, .ref select { min-width: 0; }
+.gtask-when > *, .ref, .ref select, .dur, .dur select { min-width: 0; }
 .gtask-head { display: flex; align-items: flex-start; gap: 4px; }
 .gtask-when {
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
   padding-left: 34px; font-size: 0.85rem; color: var(--muted);
 }
-.gtask-when label { display: inline-flex; align-items: center; gap: 4px; }
+.gtask-when label { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; max-width: 100%; }
 .gtask-when select, .gtask-when input {
   min-height: 30px; padding: 2px 6px; font-size: 0.85rem; max-width: 100%;
   border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);
 }
-.ref { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.ref, .dur { display: inline-flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.dur input[type='number'] { width: 4.2em; }
+.gtask-dates { padding-left: 34px; font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.gtask-dates .warn { color: var(--danger); }
+.gcal-head .field { flex: 0 1 220px; }
+.gcal-head { align-items: flex-end; }
 .gtask.type-milestone textarea, .gtask.type-deadline textarea { font-weight: 600; }
 .gtask.status-done textarea { color: var(--muted); }
 .gtask.status-crit textarea { color: var(--deadline); }
@@ -364,7 +369,7 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
   .field input, .field select, .tree textarea, .dialog textarea { font-size: 16px; } /* no iOS zoom */
 
   .grid2 { grid-template-columns: 1fr; }
-  .gtask-when { padding-left: 4px; }
+  .gtask-when, .gtask-dates { padding-left: 4px; }
   .gtask-when select, .gtask-when input { font-size: 16px; min-height: 36px; }
 
   .tabbar {

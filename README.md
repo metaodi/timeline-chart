@@ -23,19 +23,20 @@ from jsDelivr. Exports are rendered separately at natural size, so a PNG saved o
 For work that spans several sprints. Switch with **Timeline | Gantt** at the top of the editor; each mode keeps its own
 data.
 
-- **Sprint calendar** (⚙︎ Sprints / PIs or *Edit calendar*): start date, sprint length, number of sprints, sprints per PI,
-  IP iteration. The chart shows a **PI row** and a **Sprint row** with all sprints side by side
-  (`displayMode: compact`, no "staircase").
-- **Sections** (teams, epics, workstreams) contain:
-  - **Bars** from a start sprint to an end sprint (or exact dates),
-  - **Milestones** ◆ at the end of a sprint or on a date,
-  - **Deadlines** as a vertical line.
+- **No date juggling**: you give at most one date – when the plan starts (defaults to next Monday). Every bar has a
+  **duration** (*sprints*, *weeks* or *working days*) and starts **after the previous bar** of its section. Optionally a
+  bar starts at the plan start, at a sprint, **after another task** (dependency) or on an exact date, or runs *until* a
+  sprint/date. The editor shows the computed dates under each bar.
+- **Sprint calendar** (*Sprints…*): sprint length, number of sprints, sprints per PI, IP iteration. The chart shows a
+  **PI row** and a **Sprint row** with all sprints side by side (`displayMode: compact`, no "staircase").
+- **Sections** (teams, epics, workstreams) contain **bars**, **milestones** ◆ and **deadlines** (vertical line).
 - **Status**: planned, in progress (outlined), done (faded), critical (red).
-- Tasks reference sprints, so changing the calendar (e.g. a later start) moves the whole plan.
+- Change a duration or the plan start and everything that follows moves with it.
 - Bars are coloured like the timeline diagram: PIs and their sprints per PI, teams per section.
 
-The generated Mermaid code is a standard `gantt` chart. The calendar is stored as a `%% sprint-calendar …` comment so
-that importing the code restores the sprint references.
+The generated Mermaid code is a standard `gantt` chart with concrete dates, so it renders the same everywhere. The
+calendar is stored as a `%% sprint-calendar …` comment: importing the code restores sprint references, but durations
+and "after" rules come back as fixed sprints/dates. Share links and the browser autosave keep the full plan.
 
 ## Run locally
 

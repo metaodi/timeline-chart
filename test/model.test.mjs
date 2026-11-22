@@ -33,7 +33,7 @@ test('escapes characters that break the grammar', () => {
 });
 
 test('round-trips every example through parse -> serialise -> parse', () => {
-  for (const [name, code] of Object.entries(EXAMPLES)) {
+  for (const [name, code] of Object.entries(EXAMPLES).filter(([, v]) => typeof v === 'string')) {
     const { timeline, warnings } = parseMermaid(code);
     assert.deepEqual(warnings, [], name);
     assert.ok(!isEmpty(timeline), name);

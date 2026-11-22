@@ -1,8 +1,9 @@
 /**
- * Editor UI for Gantt mode: calendar summary, sections (teams, epics…) and
- * tasks whose start/end reference sprints from the calendar or exact dates.
+ * Editor UI for Gantt mode: plan start + sprint calendar, sections (teams,
+ * epics…) and tasks defined by a start rule and a duration. Concrete dates are
+ * computed by scheduleGantt() and shown under each task.
  */
-import { TASK_TYPES, STATUSES, calendarOf, resolveRef, newTask, newGanttSection } from './gantt.js';
+import { TASK_TYPES, STATUSES, DURATION_UNITS, scheduleGantt, newTask, newGanttSection } from './gantt.js';
 import { formatDate, isoDate } from './generator.js';
 
 const esc = (s) =>
@@ -11,9 +12,19 @@ const esc = (s) =>
 const iconBtn = (action, label, glyph, extra = '') =>
   `<button type="button" class="ibtn ${extra}" data-gaction="${action}" title="${label}" aria-label="${label}">${glyph}</button>`;
 
-const range = (a, b) => `${formatDate(a)} – ${formatDate(b)}`;
+const option = (value, label, selected) => `<option value="${esc(value)}"${selected ? ' selected' : ''}>${esc(label)}</option>`;
+
+const DAY = 864e5;
+function describe(when, type) {
+  if (!when) return '<span class="warn">Cannot be placed – check the start.</span>';
+  if (type !== 'task') return formatDate(when.start, 'long');
+  const days = Math.round((when.end - when.start) / DAY) + 1;
+  const span = days % 7 === 5 || days % 7 === 0 ? `${Math.round(days / 7)} wk` : `${days} days`;
+  return `${formatDate(when.start)} – ${formatDate(when.end, 'long')} · ${span}`;
+}
 
 /**
+ * @param {HTMLElement} root
  * @param {object} api
  * @param {() => object} api.getState
  * @param {(mutator: Function, focus?: string) => void} api.change  structural change (snapshot + re-render)
@@ -31,65 +42,93 @@ export function createGanttEditor(root, api) {
 
   // ------------------------------------------------------------------ render
 
-  function refSelect(field, value, cal, edge, s, t) {
-    const isSprint = cal.sprints.some((x) => x.id === value);
-    const opts = cal.sprints
-      .map((sp) => {
-        const d = edge === 'start' ? sp.start : sp.end;
-        const label = edge === 'at' ? `${sp.name} (end, ${formatDate(sp.end)})` : `${sp.name} (${formatDate(d)})`;
-        return `<option value="${sp.id}"${sp.id === value ? ' selected' : ''}>${esc(label)}</option>`;
-      })
-      .join('');
-    const date = resolveRef(value, edge === 'start' ? 'start' : 'end', cal);
-    return `<span class="ref">
-      <select data-gfield="${field}" data-gs="${s}" data-gt="${t}" aria-label="${field === 'from' ? 'Start' : 'End'}">
-        ${opts}<option value="date"${isSprint ? '' : ' selected'}>Exact date…</option>
-      </select>
-      ${isSprint ? '' : `<input type="date" data-gfield="${field}-date" data-gs="${s}" data-gt="${t}" value="${date ? isoDate(date) : ''}" aria-label="Date" />`}
-    </span>`;
+  function startSelect(task, s, t, cal, planStart) {
+    const point = task.type !== 'task';
+    const others = g()
+      .sections.flatMap((sec) => sec.tasks)
+      .filter((x) => x.id !== task.id && x.name.trim());
+    const isDate = /^\d{4}-\d{2}-\d{2}$/.test(task.from);
+    return `<select data-gfield="from" data-gs="${s}" data-gt="${t}" aria-label="${point ? 'On' : 'Start'}">
+        ${option('prev', point ? 'End of previous' : 'After previous', task.from === 'prev')}
+        ${option('plan', `Plan start${planStart ? ` (${formatDate(planStart)})` : ''}`, task.from === 'plan')}
+        ${cal.sprints.length ? `<optgroup label="Sprint">${cal.sprints
+          .map((sp) => option(sp.id, `${sp.name} (${formatDate(point ? sp.end : sp.start)})`, task.from === sp.id))
+          .join('')}</optgroup>` : ''}
+        ${others.length ? `<optgroup label="${point ? 'End of task' : 'After task'}">${others
+          .map((x) => option(`after:${x.id}`, `${point ? 'End of' : 'After'}: ${x.name}`, task.from === `after:${x.id}`))
+          .join('')}</optgroup>` : ''}
+        ${option('date', 'Exact date…', isDate)}
+      </select>${isDate ? `<input type="date" data-gfield="from-date" data-gs="${s}" data-gt="${t}" value="${task.from}" aria-label="Start date" />` : ''}`;
   }
 
-  function taskHtml(task, s, t, cal) {
+  function durationInputs(task, s, t, cal) {
+    const m = /^(\d+)([swd])$/.exec(task.duration);
+    const n = m ? m[1] : '';
+    const unit = m ? m[2] : 'until';
+    const units = DURATION_UNITS.filter((u) => u.id !== 's' || cal.sprints.length || unit === 's');
+    const end = task.to || '';
+    const endIsSprint = cal.sprints.some((sp) => sp.id === end);
+    const until =
+      unit === 'until'
+        ? `<select data-gfield="to" data-gs="${s}" data-gt="${t}" aria-label="End">
+            ${cal.sprints.map((sp) => option(sp.id, `end of ${sp.name} (${formatDate(sp.end)})`, sp.id === end)).join('')}
+            ${option('date', 'Exact date…', !endIsSprint)}
+          </select>${endIsSprint ? '' : `<input type="date" data-gfield="to-date" data-gs="${s}" data-gt="${t}" value="${esc(end)}" aria-label="End date" />`}`
+        : '';
+    return `<span class="dur">
+      ${unit === 'until' ? '' : `<input type="number" min="1" max="400" inputmode="numeric" data-gfield="dur-n" data-gs="${s}" data-gt="${t}" value="${n}" aria-label="Duration" />`}
+      <select data-gfield="dur-unit" data-gs="${s}" data-gt="${t}" aria-label="Duration unit">
+        ${units.map((u) => option(u.id, Number(n) === 1 ? u.one : u.many, u.id === unit)).join('')}
+        ${option('until', 'until…', unit === 'until')}
+      </select>${until}</span>`;
+  }
+
+  function taskHtml(task, s, t, sched) {
+    const { cal, planStart } = sched;
     const type = TASK_TYPES.find((x) => x.id === task.type) ?? TASK_TYPES[0];
     const typePicker = `<span class="kind" title="Type"><span class="kind-icon" aria-hidden="true">${type.icon}</span>
       <select data-gfield="type" data-gs="${s}" data-gt="${t}" aria-label="Type">${TASK_TYPES.map(
-        (x) => `<option value="${x.id}"${x.id === task.type ? ' selected' : ''}>${x.icon} ${x.label}</option>`,
+        (x) => option(x.id, `${x.icon} ${x.label}`, x.id === task.type),
       ).join('')}</select></span>`;
     const status = `<select class="status" data-gfield="status" data-gs="${s}" data-gt="${t}" aria-label="Status">${STATUSES.map(
-      (x) => `<option value="${x.id}"${x.id === task.status ? ' selected' : ''}>${x.label}</option>`,
+      (x) => option(x.id, x.label, x.id === task.status),
     ).join('')}</select>`;
     const when =
       task.type === 'task'
-        ? `<label>From ${refSelect('from', task.from, cal, 'start', s, t)}</label><label>to ${refSelect('to', task.to, cal, 'end', s, t)}</label>`
-        : `<label>On ${refSelect('to', task.to, cal, 'at', s, t)}</label>`;
+        ? `<label>Start ${startSelect(task, s, t, cal, planStart)}</label><label>Duration ${durationInputs(task, s, t, cal)}</label>`
+        : `<label>On ${startSelect(task, s, t, cal, planStart)}</label>`;
+    const placeholder = task.type === 'task' ? 'Feature, epic, story…' : task.type === 'milestone' ? 'Release, demo…' : 'Code freeze, deadline…';
     return `<li class="gtask type-${task.type} status-${task.status || 'planned'}" data-gt="${t}">
       <div class="gtask-head">
         ${typePicker}
-        <textarea rows="1" data-gfield="name" data-gs="${s}" data-gt="${t}" placeholder="${task.type === 'task' ? 'Feature, epic, story…' : task.type === 'milestone' ? 'Release, demo…' : 'Code freeze, deadline…'}">${esc(task.name)}</textarea>
+        <textarea rows="1" data-gfield="name" data-gs="${s}" data-gt="${t}" placeholder="${placeholder}">${esc(task.name)}</textarea>
         <span class="tools">${iconBtn('task-up', 'Move up', '↑')}${iconBtn('task-down', 'Move down', '↓')}${iconBtn('task-dup', 'Duplicate', '⧉')}${iconBtn('task-delete', 'Delete', '✕', 'del')}</span>
       </div>
       <div class="gtask-when">${when}${status}</div>
+      <div class="gtask-dates">${describe(sched.dates[s][t], task.type)}</div>
     </li>`;
   }
 
-  function calendarHtml(cal) {
+  function calendarHtml({ cal }) {
     const c = g().calendar;
     const opt = (key, label) =>
       `<label class="check small"><input type="checkbox" data-gopt="${key}"${g()[key] ? ' checked' : ''} /> ${label}</label>`;
+    const sprints = cal.sprints.filter((x) => !x.ip).length;
     const summary = cal.sprints.length
-      ? `<strong>${cal.sprints.filter((x) => !x.ip).length} sprints</strong> × ${c.sprintWeeks} weeks from ${formatDate(cal.sprints[0].start, 'long')}${
-          cal.pis.length ? ` · ${cal.pis.length} PI${cal.pis.length > 1 ? 's' : ''} of ${c.sprintsPerPI} sprints${c.ipIteration ? ' + IP' : ''}` : ''
-        }<br><span class="muted small">${range(cal.sprints[0].start, cal.sprints[cal.sprints.length - 1].end)}</span>`
-      : '<span class="muted">No sprint calendar yet – tasks use exact dates.</span>';
+      ? `${sprints} sprints × ${c.sprintWeeks} weeks${cal.pis.length ? ` · ${cal.pis.length} PI${cal.pis.length > 1 ? 's' : ''} of ${c.sprintsPerPI}${c.ipIteration ? ' + IP' : ''}` : ''}`
+      : '';
     return `<div class="card gcal">
-      <div class="gcal-head"><div>${summary}</div>
-        <button type="button" class="btn small" data-gaction="calendar">${cal.sprints.length ? 'Edit calendar' : 'Set up sprints'}</button></div>
+      <div class="gcal-head">
+        <label class="field"><span>Plan starts</span><input type="date" data-gcal="startDate" value="${esc(c.startDate)}" /></label>
+        <button type="button" class="btn small" data-gaction="calendar">Sprints…</button>
+      </div>
+      <div class="muted small">${summary}</div>
       <div class="gcal-opts">${opt('showPIs', 'Show PIs')}${opt('showSprints', 'Show sprints')}</div>
     </div>`;
   }
 
   function render() {
-    const cal = calendarOf(g());
+    const sched = scheduleGantt(g());
     const sections = g()
       .sections.map(
         (sec, s) => `<div class="group card section" data-gs="${s}">
@@ -97,7 +136,7 @@ export function createGanttEditor(root, api) {
           <textarea rows="1" class="section-name" data-gfield="section" data-gs="${s}" placeholder="Team, epic, workstream…">${esc(sec.name)}</textarea>
           <span class="tools">${iconBtn('section-up', 'Move section up', '↑')}${iconBtn('section-down', 'Move section down', '↓')}${iconBtn('section-dup', 'Duplicate section', '⧉')}${iconBtn('section-delete', 'Delete section', '✕', 'del')}</span>
         </div>
-        <ul class="gtasks">${sec.tasks.map((task, t) => taskHtml(task, s, t, cal)).join('')}</ul>
+        <ul class="gtasks">${sec.tasks.map((task, t) => taskHtml(task, s, t, sched)).join('')}</ul>
         <div class="gadd">
           <button type="button" class="add-event" data-gaction="add-task">+ Bar</button>
           <button type="button" class="add-event" data-gaction="add-milestone">+ Milestone</button>
@@ -106,10 +145,10 @@ export function createGanttEditor(root, api) {
       </div>`,
       )
       .join('');
-    root.innerHTML = `${calendarHtml(cal)}
+    root.innerHTML = `${calendarHtml(sched)}
       <div class="tree">${sections || '<p class="empty card">Add a section for a team, epic or workstream.</p>'}</div>
       <div class="add-row"><button type="button" class="btn primary" data-gaction="add-section">+ Section (team, epic…)</button></div>
-      <p class="hint">Bars can span several sprints: pick a start and an end sprint. Changing the calendar moves all tasks with it.</p>`;
+      <p class="hint">Give each bar a duration – it starts after the previous one. Dates are calculated for you.</p>`;
     root.querySelectorAll('textarea').forEach(autosize);
   }
 
@@ -131,37 +170,35 @@ export function createGanttEditor(root, api) {
     if (j >= 0 && j < arr.length) [arr[i], arr[j]] = [arr[j], arr[i]];
   }
 
-  const clone = (o) => JSON.parse(JSON.stringify(o));
+  const copy = (task) => ({ ...JSON.parse(JSON.stringify(task)), id: newTask().id });
 
-  /** A sensible default position for a new task: after the section's last task. */
-  function nextTask(sec, type) {
-    const cal = calendarOf(g());
-    const last = sec?.tasks[sec.tasks.length - 1];
-    const ref = last?.to || cal.sprints[0]?.id || isoDate(new Date());
-    return newTask(type === 'task' ? last?.from || ref : ref, ref, type);
-  }
-
+  /** New tasks follow the previous one; the first task of a section starts at the plan start. */
   const addTask = (type) => ({ s }) => {
     const sec = g().sections[s];
-    api.change(() => sec.tasks.push(nextTask(sec, type)), sel.task(s, sec.tasks.length));
+    const from = sec.tasks.length ? 'prev' : 'plan';
+    api.change(() => sec.tasks.push(newTask(type, from)), sel.task(s, sec.tasks.length));
   };
 
   const actions = {
     calendar: () => api.openCalendar(),
     'add-section': () => {
       const n = g().sections.length;
-      api.change(() => g().sections.push(newGanttSection('', nextTask(null, 'task'))), sel.section(n));
+      api.change(() => g().sections.push(newGanttSection()), sel.section(n));
     },
     'section-up': ({ s }) => api.change(() => move(g().sections, s, -1)),
     'section-down': ({ s }) => api.change(() => move(g().sections, s, 1)),
-    'section-dup': ({ s }) => api.change(() => g().sections.splice(s + 1, 0, clone(g().sections[s])), sel.section(s + 1)),
+    'section-dup': ({ s }) =>
+      api.change(() => {
+        const sec = g().sections[s];
+        g().sections.splice(s + 1, 0, { name: sec.name, tasks: sec.tasks.map(copy) });
+      }, sel.section(s + 1)),
     'section-delete': ({ s }) => api.change(() => g().sections.splice(s, 1)),
     'add-task': addTask('task'),
     'add-milestone': addTask('milestone'),
     'add-deadline': addTask('deadline'),
     'task-up': ({ s, t }) => api.change(() => move(g().sections[s].tasks, t, -1)),
     'task-down': ({ s, t }) => api.change(() => move(g().sections[s].tasks, t, 1)),
-    'task-dup': ({ s, t }) => api.change(() => g().sections[s].tasks.splice(t + 1, 0, clone(g().sections[s].tasks[t])), sel.task(s, t + 1)),
+    'task-dup': ({ s, t }) => api.change(() => g().sections[s].tasks.splice(t + 1, 0, copy(g().sections[s].tasks[t])), sel.task(s, t + 1)),
     'task-delete': ({ s, t }) => api.change(() => g().sections[s].tasks.splice(t, 1)),
   };
 
@@ -192,35 +229,56 @@ export function createGanttEditor(root, api) {
       api.update();
       return;
     }
+    if (el.dataset.gcal) {
+      if (el.value) api.change(() => (g().calendar[el.dataset.gcal] = el.value));
+      return;
+    }
     const field = el.dataset.gfield;
     if (!field || el.tagName === 'TEXTAREA') return;
     const { s, t } = locate(el);
     const task = g().sections[s].tasks[t];
-    const cal = calendarOf(g());
+    const sched = scheduleGantt(g());
+    const when = sched.dates[s][t];
+    const m = /^(\d+)([swd])$/.exec(task.duration);
     api.change(() => {
-      if (field === 'type') {
-        task.type = el.value;
-        if (task.type !== 'task') task.from = task.to;
-      } else if (field === 'status') {
-        task.status = el.value;
-      } else if (field === 'from' || field === 'to') {
-        if (el.value === 'date') {
-          const d = resolveRef(task[field], field === 'from' ? 'start' : 'end', cal) ?? new Date();
-          task[field] = isoDate(d);
-        } else {
-          task[field] = el.value;
-        }
-        if (task.type !== 'task') task.from = task.to;
-      } else if (field === 'from-date' || field === 'to-date') {
-        if (!el.value) return;
-        const key = field.slice(0, -5);
-        task[key] = el.value;
-        if (task.type !== 'task') task.from = task.to;
+      switch (field) {
+        case 'type':
+          task.type = el.value;
+          if (task.type !== 'task') task.duration = '';
+          else if (!task.duration) task.duration = sched.cal.sprints.length ? '1s' : '2w';
+          break;
+        case 'status':
+          task.status = el.value;
+          break;
+        case 'from':
+          // "Exact date…" starts from the currently computed date
+          task.from = el.value === 'date' ? isoDate(when?.start ?? sched.planStart ?? new Date()) : el.value;
+          break;
+        case 'from-date':
+          if (el.value) task.from = el.value;
+          break;
+        case 'dur-n':
+          task.duration = `${Math.max(1, Math.round(Number(el.value) || 1))}${m ? m[2] : 'w'}`;
+          break;
+        case 'dur-unit':
+          if (el.value === 'until') {
+            task.duration = '';
+            task.to = when ? isoDate(when.end) : '';
+          } else {
+            task.duration = `${m ? m[1] : 1}${el.value}`;
+          }
+          break;
+        case 'to':
+          task.to = el.value === 'date' ? isoDate(when?.end ?? new Date()) : el.value;
+          break;
+        case 'to-date':
+          if (el.value) task.to = el.value;
+          break;
       }
     });
   });
 
-  /** Enter in a task name adds the next task; Shift+Enter is ignored (single line). */
+  /** Enter in a task name adds the next task (starting after it). */
   root.addEventListener('keydown', (ev) => {
     const el = ev.target;
     if (ev.key !== 'Enter' || ev.isComposing || el.tagName !== 'TEXTAREA') return;
@@ -231,8 +289,7 @@ export function createGanttEditor(root, api) {
       if (sec.tasks.length) root.querySelector(sel.task(s, 0))?.focus();
       else addTask('task')({ s });
     } else {
-      const type = sec.tasks[t].type;
-      api.change(() => sec.tasks.splice(t + 1, 0, nextTask({ tasks: sec.tasks.slice(0, t + 1) }, type)), sel.task(s, t + 1));
+      api.change(() => sec.tasks.splice(t + 1, 0, newTask(sec.tasks[t].type, 'prev')), sel.task(s, t + 1));
     }
   });
 
