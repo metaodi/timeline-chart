@@ -17,6 +17,7 @@ import { EXAMPLES, DEFAULT_EXAMPLE, GANTT_EXAMPLE, nextMonday as nextMondayIso }
 import { downloadSvg, downloadPng, copyText } from './export.js';
 import { PRESETS, themeVars, applyVars } from './themes.js';
 import { loadLocal, saveLocal, encodeShare, decodeShare } from './storage.js';
+import { isPng, stateFromPng, stateFromSvg } from './embed.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 let ganttEditor = null; // created in boot()
@@ -491,6 +492,42 @@ function setView(view) {
   window.scrollTo({ top: 0 });
 }
 
+/**
+ * Open a file: a PNG/SVG exported by this app restores the embedded state 1:1
+ * (both modes, all settings); other text files are read as Mermaid code.
+ * @returns {Promise<boolean>} whether something was loaded
+ */
+async function openFile(file) {
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let restored = null;
+    if (isPng(bytes)) restored = stateFromPng(bytes);
+    else {
+      const text = new TextDecoder().decode(bytes);
+      if (/<svg[\s>]/.test(text)) restored = stateFromSvg(text);
+      else {
+        const { timeline, warnings } = parseMermaid(text);
+        if (isEmpty(timeline)) throw new Error(warnings[0] || 'No diagram found in this file');
+        loadTimeline(timeline);
+        toast(`Imported ${file.name}`);
+        return true;
+      }
+    }
+    if (!restored) {
+      toast('This file has no Timeline Builder data (only files exported by this app can be restored)');
+      return false;
+    }
+    snapshot();
+    state = normalize(restored);
+    refreshAll();
+    toast(`Restored from ${file.name} – undo to go back`);
+    return true;
+  } catch (err) {
+    toast(`Could not open ${file.name}: ${err.message}`);
+    return false;
+  }
+}
+
 /** Load a timeline or gantt chart; the data of the other mode is kept. */
 function loadTimeline(t) {
   snapshot();
@@ -521,6 +558,23 @@ function bindDialogs() {
     imp.showModal();
     $('#import-text').focus();
   });
+  // Open a file: PNG/SVG exported by this app (embedded state) or Mermaid code
+  $('#open-file').addEventListener('click', () => $('#file-input').click());
+  $('#file-input').addEventListener('change', async (ev) => {
+    const file = ev.target.files?.[0];
+    ev.target.value = '';
+    if (file && (await openFile(file))) imp.close();
+  });
+  addEventListener('dragover', (ev) => {
+    if ([...(ev.dataTransfer?.types ?? [])].includes('Files')) ev.preventDefault();
+  });
+  addEventListener('drop', (ev) => {
+    const file = ev.dataTransfer?.files?.[0];
+    if (!file) return;
+    ev.preventDefault();
+    openFile(file).then((ok) => ok && imp.open && imp.close());
+  });
+
   $('#import-ok').addEventListener('click', (ev) => {
     const { timeline, warnings } = parseMermaid($('#import-text').value);
     if (isEmpty(timeline) && warnings.length) {
@@ -672,13 +726,13 @@ function bindToolbar() {
   });
   $('#dl-svg').addEventListener('click', () => {
     const out = exportSvg();
-    if (out) downloadSvg(out.el, state.title, out.background);
+    if (out) downloadSvg(out.el, state.title, out.background, state);
   });
   $('#dl-png').addEventListener('click', async () => {
     const out = exportSvg();
     if (!out) return;
     try {
-      await downloadPng(out.el, state.title, out.background);
+      await downloadPng(out.el, state.title, out.background, state);
     } catch (err) {
       toast(err.message);
     }

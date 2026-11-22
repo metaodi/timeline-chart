@@ -41,6 +41,7 @@ Plain ES modules in `js/`, one global app state (plain JSON) in `app.js`, re-ren
 | `themes.js` | colour presets (Pele CSS variables), `PELE_DEFAULTS`, row colour tokens |
 | `pele-css.js` | CSS for the Pele playground's CSS tab |
 | `export.js` / `storage.js` / `drag.js` | downloads + clipboard / autosave + share links / pointer-event drag & drop |
+| `embed.js` | full app state in exports (PNG `iTXt` chunk, SVG `<metadata id="timeline-builder">`) for a 1:1 restore |
 
 ### Rendering pipeline (order matters)
 
@@ -77,7 +78,14 @@ Concrete dates only (Mermaid can't express our scheduling). Everything Mermaid c
 that the importer reads back: `%% sprint-calendar …`, `%% sprint-plan [json]`, `%% section-colours …`,
 `%% row-colours …`, `%% notes {json}`. Links use standard `click <id> href "…"`. Layout = presence of
 `displayMode: compact` in the frontmatter; `useWidth` sets the chart width. Durations/`after` rules come back as
-fixed sprints/dates on import (share links and autosave keep the full state).
+fixed sprints/dates on import (share links, autosave and exported PNG/SVG files keep the full state).
+
+### State in exported files
+
+PNG/SVG downloads embed `{"app":"timeline-builder","v":1,"state":…}` (`embed.js`). `openFile()` in `app.js` (Import
+dialog "Open file…" or drop on the page) restores it by **replacing the whole state** (both modes) with a
+`snapshot()` for undo; other text files are parsed as Mermaid. When adding state fields, keep `normalize()` tolerant
+so older files still load.
 
 ## Pele facts learned the hard way
 

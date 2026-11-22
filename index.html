@@ -115,8 +115,13 @@
     <!-- Import dialog -->
     <dialog id="import-dialog" class="dialog">
       <form method="dialog">
-        <h2>Import Mermaid code</h2>
-        <p class="muted">Paste an existing <code>timeline</code> diagram. It replaces the current timeline.</p>
+        <h2>Import</h2>
+        <p class="muted">Open a PNG or SVG exported by this app to restore it exactly (also works by dropping the file
+          on the page) – or paste Mermaid <code>timeline</code> / <code>gantt</code> code.</p>
+        <div class="file-row">
+          <button type="button" class="btn" id="open-file">Open file…</button>
+          <input type="file" id="file-input" accept=".png,.svg,.mmd,.mermaid,.txt,image/png,image/svg+xml,text/plain" hidden />
+        </div>
         <textarea id="import-text" rows="12" spellcheck="false" placeholder="timeline&#10;  title …&#10;  section …&#10;    Sprint 1 : Story A : Story B"></textarea>
         <p class="error" id="import-warnings" hidden></p>
         <div class="dialog-actions">

@@ -16,6 +16,9 @@ Diagrams are rendered with [Pele](https://pele.run), a fast, lightweight Mermaid
 - **Sprint / PI generator**: start date, sprint length, sprints per PI, optional IP iteration, date labels
 - **Milestones & deadlines**: every item/period has a type (🏁 milestone, ⏰ deadline, 🚀 release, ⚠️ risk, ✅ done)
 - **Export**: download PNG or SVG (optionally transparent), copy the Mermaid code
+- **Restore from an exported file**: PNG and SVG exports carry the complete app state (PNG `iTXt` chunk, SVG
+  `<metadata>`). *Import → Open file…* or dropping the file on the page restores the diagram exactly as it was –
+  durations, sprints, colours, notes and all settings (undo goes back). `.mmd` files are read as Mermaid code.
 - **Pele playground**: the *Pele CSS* tab next to the Mermaid code gives CSS for the playground's CSS tab
   ([pele.run](https://pele.run)) – a complete `.pele { --pele-… }` theme and, for Gantt charts, the colours of PIs,
   sprints, sections, statuses and row stripes (by the task ids in the Mermaid code). Paste the Mermaid code and the
@@ -140,6 +143,7 @@ js/drag.js          drag & drop between lists (pointer events: mouse and touch)
 js/svg-title.js     left-aligned diagram title
 js/gantt-notes.js   tooltips, numbered notes below the chart, link markers
 js/gantt-collapse.js "In my order" layout: PI and sprint rows collapsed into one row each
+js/embed.js         app state embedded in PNG (iTXt) / SVG (<metadata>) exports, read back on import
 js/storage.js       localStorage autosave, share-link encoding
 js/app.js           UI wiring
 test/               node:test unit tests
