@@ -27,15 +27,22 @@ data.
   **duration** (*sprints*, *weeks* or *working days*) and starts **after the previous bar** of its section. Optionally a
   bar starts at the plan start, at a sprint, **after another task** (dependency) or on an exact date, or runs *until* a
   sprint/date. The editor shows the computed dates under each bar.
-- **Sprint calendar** (*Sprints…*): sprint length, number of sprints, sprints per PI, IP iteration. The chart shows a
-  **PI row** and a **Sprint row** with all sprints side by side (`displayMode: compact`, no "staircase").
+- **PIs & sprints**: *Generate…* creates them from settings (sprint length, number of sprints, sprints per PI, IP
+  iteration, sprint numbers continuing or **starting again at 1 in every PI**). Afterwards every PI and sprint is
+  editable in the *PIs & sprints* list: rename, change a sprint's length in weeks, add, delete, reorder (a sprint moved
+  past the edge of a PI moves into the neighbouring PI). A PI without a name holds sprints that belong to no PI.
+  Sprint dates follow from the plan start and the sprint lengths.
+- The chart shows a **PI row** and a **Sprint row** with all sprints side by side (`displayMode: compact`, no
+  "staircase").
 - **Sections** (teams, epics, workstreams) contain **bars**, **milestones** ◆ and **deadlines** (vertical line).
 - **Status**: planned, in progress (outlined), done (faded), critical (red).
 - Change a duration or the plan start and everything that follows moves with it.
-- Bars are coloured like the timeline diagram: PIs and their sprints per PI, teams per section.
+- **Colours**: PIs and their sprints share a colour per PI. Each section (e.g. a category of work) has its own colour:
+  automatic (never a PI colour, never red, which means *critical*) or chosen with the colour dot in the section header.
 
 The generated Mermaid code is a standard `gantt` chart with concrete dates, so it renders the same everywhere. The
-calendar is stored as a `%% sprint-calendar …` comment: importing the code restores sprint references, but durations
+settings and the edited PIs/sprints are stored as `%% sprint-calendar …` / `%% sprint-plan …` comments: importing the
+code restores them and the sprint references, but durations
 and "after" rules come back as fixed sprints/dates. Share links and the browser autosave keep the full plan.
 
 ## Run locally

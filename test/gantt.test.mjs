@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { toMermaid, normalize } from '../js/model.js';
 import { parseMermaid } from '../js/parser.js';
 import { sprintCalendar } from '../js/generator.js';
-import { taskLine, scheduleGantt, escapeGanttText } from '../js/gantt.js';
+import { taskLine, scheduleGantt, escapeGanttText, sectionColour } from '../js/gantt.js';
 import { ganttExample } from '../js/examples.js';
 
 const calendar = { startDate: '2026-01-05', sprintWeeks: 2, sprintCount: 8, sprintsPerPI: 4, ipIteration: true, firstPI: '2026.1' };
@@ -109,4 +109,51 @@ test('gantt import handles durations, "after" and plain dates', () => {
 
 test('gantt text escaping', () => {
   assert.equal(escapeGanttText('A: b; #1\nx'), 'A#58; b#59; #35;1 x');
+});
+
+test('sprint plan: generated from settings, then editable (names, lengths, PIs)', () => {
+  const state = normalize(plan([bar('A', 's2', '2s')]));
+  const pis = state.gantt.pis;
+  assert.deepEqual(pis.map((p) => [p.name, p.sprints.length]), [['PI 2026.1', 5], ['PI 2026.2', 5]]);
+  // rename a sprint, make sprint 1 three weeks long, rename a PI
+  pis[0].sprints[1].name = 'Hardening';
+  pis[0].sprints[0].weeks = 3;
+  pis[1].name = 'Summer PI';
+  const code = toMermaid(state);
+  assert.match(code, /    1 : s1, 2026-01-05, 2026-01-23\n    Hardening : s2, 2026-01-26, 2026-02-06\n/);
+  assert.match(code, /    Summer PI : pi2, 2026-03-23, /);
+  // the task referencing s2 follows the sprint (2 sprints from s2)
+  assert.match(code, /A : g0t0, 2026-01-26, 2026-02-20/);
+  // import restores the edited plan
+  const back = parseMermaid(code).timeline.gantt.pis;
+  assert.deepEqual(back, pis);
+});
+
+test('sprint plan: PI without a name groups sprints without a PI row entry', () => {
+  const state = normalize(plan([bar('A', 'plan', '1s')]));
+  state.gantt.pis = [{ id: 'pi1', name: '', sprints: [{ id: 's1', name: 'Sprint 7', weeks: 2 }, { id: 's2', name: 'Release week', weeks: 1 }] }];
+  const code = toMermaid(state);
+  assert.doesNotMatch(code, /section PIs/);
+  assert.match(code, /section Sprints\n    7 : s1, 2026-01-05, 2026-01-16\n    Release week : s2, 2026-01-19, 2026-01-23\n/);
+});
+
+test('sprint numbering can restart in every PI', () => {
+  const { sprints } = sprintCalendar({ ...calendar, restartNumbering: true });
+  assert.deepEqual(sprints.map((s) => s.name), [
+    'Sprint 1', 'Sprint 2', 'Sprint 3', 'Sprint 4', 'IP Iteration',
+    'Sprint 1', 'Sprint 2', 'Sprint 3', 'Sprint 4', 'IP Iteration',
+  ]);
+  const code = toMermaid(plan([bar('A', 's6', '1s')], { calendar: { ...calendar, restartNumbering: true } }));
+  assert.match(code, /restart=1/);
+  assert.equal(parseMermaid(code).timeline.gantt.calendar.restartNumbering, true);
+});
+
+test('section colours: automatic after the PI colours, or chosen per section', () => {
+  const state = normalize(plan([bar('A', 'plan', '1s')]));
+  state.gantt.sections.push({ name: 'Ops', color: 0, tasks: [bar('B', 'plan', '1w')] }, { name: 'Dev', color: 3, tasks: [bar('C', 'plan', '1w')] });
+  const g = state.gantt;
+  assert.deepEqual([0, 1, 2].map((i) => sectionColour(g, i)), [3, 5, 3]); // PIs use 1 and 2; red (4) is kept for "critical"
+  const code = toMermaid(state);
+  assert.match(code, /%% section-colours 0,0,3\n/);
+  assert.deepEqual(parseMermaid(code).timeline.gantt.sections.map((s) => s.color), [0, 0, 3]);
 });

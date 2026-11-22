@@ -1,9 +1,9 @@
 /**
  * Sprint / Program Increment (PI) calendar.
  *
- * `sprintCalendar()` computes the dates of every sprint (and IP iteration) and
- * PI. It is used by the timeline generator (`generateSprints`) and by Gantt
- * mode, where tasks reference sprints by id ("s1", "s2", …).
+ * `sprintPlanFromConfig()` turns the calendar settings into PIs and sprints
+ * (editable in Gantt mode), `calendarFromPlan()` adds the dates. Tasks in Gantt
+ * mode reference sprints by id ("s1", "s2", …).
  */
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -14,6 +14,7 @@ export const DEFAULT_CALENDAR = {
   sprintCount: 8,
   sprintsPerPI: 4,
   ipIteration: true,
+  restartNumbering: false, // sprint numbers start again in every PI
   firstSprint: 1,
   firstPI: '1',
   sprintPrefix: 'Sprint',
@@ -53,54 +54,86 @@ export function nextName(name) {
 }
 
 /**
+ * Sprint plan = PIs containing sprints, without dates. It is generated from the
+ * calendar settings and can then be edited freely (names, lengths, order).
+ * A PI with an empty name groups sprints that belong to no PI.
+ *
+ * @typedef {{ id: string, name: string, weeks: number }} PlanSprint
+ * @typedef {{ id: string, name: string, sprints: PlanSprint[] }} PlanPI
  * @param {Partial<typeof DEFAULT_CALENDAR>} o
- * @returns {{
- *   sprints: { id: string, name: string, short: string, start: Date, end: Date, pi: number|null, ip: boolean }[],
- *   pis: { id: string, name: string, start: Date, end: Date }[],
- * }} `end` is the last working day (inclusive).
+ * @returns {PlanPI[]}
  */
-export function sprintCalendar(o) {
+export function sprintPlanFromConfig(o) {
   const opt = { ...DEFAULT_CALENDAR, ...o };
   const weeks = Math.max(1, Math.min(12, Number(opt.sprintWeeks) || 1));
   const count = Math.max(1, Math.min(200, Number(opt.sprintCount) || 1));
   const perPI = Math.max(0, Number(opt.sprintsPerPI) || 0);
-  const sprints = [];
-  const pis = [];
-  let cursor = parseDate(opt.startDate);
   let sprintNo = Number(opt.firstSprint) || 0;
-  let piName = String(opt.firstPI ?? '1').trim() || '1';
-
-  const iteration = (name, pi, ip) => {
-    const start = cursor;
-    cursor = addDays(cursor, weeks * 7);
-    const short = ip ? 'IP' : String(sprintNo - 1);
-    const s = { id: `s${sprints.length + 1}`, name, short, start, end: lastWeekday(addDays(cursor, -1)), pi, ip };
-    sprints.push(s);
-    return s;
-  };
+  let sid = 0;
+  const sprint = (name) => ({ id: `s${++sid}`, name, weeks });
 
   if (perPI === 0) {
-    for (let i = 0; i < count; i++) iteration(`${opt.sprintPrefix} ${sprintNo++}`, null, false);
-    return { sprints, pis };
+    const sprints = [];
+    for (let i = 0; i < count; i++) sprints.push(sprint(`${opt.sprintPrefix} ${sprintNo++}`));
+    return [{ id: 'pi1', name: '', sprints }];
   }
-
+  const pis = [];
+  let piName = String(opt.firstPI ?? '1').trim() || '1';
   let remaining = count;
   while (remaining > 0) {
-    const index = pis.length;
-    const first = sprints.length;
     const n = Math.min(perPI, remaining);
-    for (let i = 0; i < n; i++) iteration(`${opt.sprintPrefix} ${sprintNo++}`, index, false);
+    if (opt.restartNumbering) sprintNo = Number(opt.firstSprint) || 0;
+    const sprints = [];
+    for (let i = 0; i < n; i++) sprints.push(sprint(`${opt.sprintPrefix} ${sprintNo++}`));
+    if (opt.ipIteration) sprints.push(sprint('IP Iteration'));
     remaining -= n;
-    if (opt.ipIteration) iteration('IP Iteration', index, true);
-    pis.push({
-      id: `pi${index + 1}`,
-      name: `${opt.piPrefix} ${piName}`,
-      start: sprints[first].start,
-      end: sprints[sprints.length - 1].end,
-    });
+    pis.push({ id: `pi${pis.length + 1}`, name: `${opt.piPrefix} ${piName}`, sprints });
     piName = nextName(piName);
   }
+  return pis;
+}
+
+const isIP = (name) => /^IP\b/i.test(String(name).trim());
+
+/** Short label for the sprint row: "IP", the trailing number ("Sprint 12" -> "12") or the name. */
+export function shortSprintLabel(name) {
+  if (isIP(name)) return 'IP';
+  const m = /(\d+)\s*$/.exec(String(name));
+  return m ? m[1] : String(name).trim();
+}
+
+/**
+ * Dates for a sprint plan: sprints follow each other from `startDate`.
+ * @param {string} startDate YYYY-MM-DD
+ * @param {PlanPI[]} plan
+ * @returns {{
+ *   sprints: { id: string, name: string, short: string, weeks: number, start: Date, end: Date, pi: number|null, ip: boolean }[],
+ *   pis: { id: string, name: string, start: Date, end: Date }[],
+ * }} `pi` is an index into `pis` (null for sprints without a PI); `end` is the last working day.
+ */
+export function calendarFromPlan(startDate, plan) {
+  const sprints = [];
+  const pis = [];
+  let cursor = parseDate(startDate);
+  for (const group of plan) {
+    if (!group.sprints.length) continue;
+    const named = String(group.name).trim() !== '';
+    const index = named ? pis.length : null;
+    const first = sprints.length;
+    for (const sp of group.sprints) {
+      const weeks = Math.max(1, Number(sp.weeks) || 1);
+      const start = cursor;
+      cursor = addDays(cursor, weeks * 7);
+      sprints.push({ id: sp.id, name: sp.name, short: shortSprintLabel(sp.name), weeks, start, end: lastWeekday(addDays(cursor, -1)), pi: index, ip: isIP(sp.name) });
+    }
+    if (named) pis.push({ id: group.id, name: group.name, start: sprints[first].start, end: sprints[sprints.length - 1].end });
+  }
   return { sprints, pis };
+}
+
+/** Calendar straight from the settings (used by the timeline generator). */
+export function sprintCalendar(o) {
+  return calendarFromPlan({ ...DEFAULT_CALENDAR, ...o }.startDate, sprintPlanFromConfig(o));
 }
 
 /**
