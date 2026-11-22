@@ -69,7 +69,7 @@ test('task lines use the computed dates', () => {
 
 test('gantt output is compact (sprints side by side) and has short sprint labels', () => {
   const code = toMermaid({ mode: 'gantt', gantt: { calendar, sections: [{ name: 'Team', tasks: [bar('A', 's1', '', 's2')] }] } });
-  assert.match(code, /^---\nconfig:\n  gantt:\n    displayMode: compact\n---\ngantt\n/);
+  assert.match(code, /^---\nconfig:\n  gantt:\n    displayMode: compact\n    useWidth: \d+\n---\ngantt\n/);
   assert.match(code, /section Sprints\n    1 : s1, 2026-01-05, 2026-01-16\n/);
   assert.match(code, /    IP : s5, 2026-03-02, 2026-03-13\n/);
   assert.match(code, /section Team\n    A : g0t0, 2026-01-05, 2026-01-30\n/);
@@ -152,8 +152,16 @@ test('section colours: automatic after the PI colours, or chosen per section', (
   const state = normalize(plan([bar('A', 'plan', '1s')]));
   state.gantt.sections.push({ name: 'Ops', color: 0, tasks: [bar('B', 'plan', '1w')] }, { name: 'Dev', color: 3, tasks: [bar('C', 'plan', '1w')] });
   const g = state.gantt;
-  assert.deepEqual([0, 1, 2].map((i) => sectionColour(g, i)), [3, 5, 3]); // PIs use 1 and 2; red (4) is kept for "critical"
+  assert.deepEqual([0, 1, 2].map((i) => sectionColour(g, i)), [1, 2, 3]); // automatic, or chosen (3)
   const code = toMermaid(state);
   assert.match(code, /%% section-colours 0,0,3\n/);
   assert.deepEqual(parseMermaid(code).timeline.gantt.sections.map((s) => s.color), [0, 0, 3]);
+});
+
+test('gantt width grows with the length of the plan', () => {
+  const short = toMermaid(plan([bar('A', 'plan', '1s')], { calendar: { ...calendar, sprintCount: 2, sprintsPerPI: 0 } }));
+  const long = toMermaid(plan([bar('A', 'plan', '1s')], { calendar: { ...calendar, sprintCount: 40, sprintsPerPI: 4 } }));
+  const width = (code) => Number(/useWidth: (\d+)/.exec(code)[1]);
+  assert.equal(width(short), 1000);
+  assert.ok(width(long) > 3000 && width(long) <= 4000, String(width(long)));
 });

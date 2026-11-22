@@ -37,8 +37,12 @@ data.
 - **Sections** (teams, epics, workstreams) contain **bars**, **milestones** ◆ and **deadlines** (vertical line).
 - **Status**: planned, in progress (outlined), done (faded), critical (red).
 - Change a duration or the plan start and everything that follows moves with it.
-- **Colours**: PIs and their sprints share a colour per PI. Each section (e.g. a category of work) has its own colour:
-  automatic (never a PI colour, never red, which means *critical*) or chosen with the colour dot in the section header.
+- **Width**: the chart width grows with the plan (about 40px per week, 1000–4000px, Mermaid `useWidth`). On desktop
+  the preview shows it at full width and scrolls horizontally; **⤢ Wide** hides the editor so the chart can use the
+  whole window. On phones it scales down (zoom for details).
+- **Colours**: PIs are black and sprints grey (in dark themes: light), so colour is left to the sections. Each section
+  (e.g. a category of work) has its own colour: automatic (never red, which means *critical*) or chosen with the
+  colour dot in the section header.
 
 The generated Mermaid code is a standard `gantt` chart with concrete dates, so it renders the same everywhere. The
 settings and the edited PIs/sprints are stored as `%% sprint-calendar …` / `%% sprint-plan …` comments: importing the
@@ -85,8 +89,10 @@ timeline TD                # or "timeline" / "timeline LR"
 Characters that would break the grammar are escaped automatically (`#` → `#35;`, `: ` → `#58;`).
 
 Themes: Pele styles diagrams with CSS variables, so the theme menu applies colour presets (`js/themes.js`) to the
-preview and bakes them into SVG/PNG exports. The matching Mermaid theme name is written into the code's frontmatter so
-the diagram looks similar in other Mermaid tools.
+preview and bakes them into SVG/PNG exports. On SVG export every `var(...)` is replaced by its concrete colour and the
+background is a real rectangle (`js/svg-vars.js`), so the file looks the same in programs without CSS-variable support
+(Inkscape, Illustrator, PowerPoint, …). The matching Mermaid theme name is written into the code's frontmatter so the
+diagram looks similar in other Mermaid tools.
 
 Mermaid has no native milestone/deadline concept in timelines, so item types are stored as an emoji prefix
 (e.g. `🏁 Go-live`). That keeps them visible in the chart and lets them survive copy & import.
@@ -105,6 +111,7 @@ js/gantt-style.js   colours Gantt bars like the timeline, shortens overflowing l
 js/examples.js      built-in examples (add your own)
 js/themes.js        Pele colour presets (CSS variables)
 js/export.js        SVG / PNG download, clipboard
+js/svg-vars.js      resolves CSS variables to concrete colours for SVG export
 js/storage.js       localStorage autosave, share-link encoding
 js/app.js           UI wiring
 test/               node:test unit tests
