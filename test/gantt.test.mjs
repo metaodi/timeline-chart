@@ -165,3 +165,21 @@ test('gantt width grows with the length of the plan', () => {
   assert.equal(width(short), 1000);
   assert.ok(width(long) > 3000 && width(long) <= 4000, String(width(long)));
 });
+
+test('row stripes: presets and custom colours, kept in the code', async () => {
+  const { rowColour, mixHex, themeVars } = await import('../js/themes.js');
+  const vars = themeVars('default');
+  assert.equal(rowColour('surface', vars), '#f3f3f3');
+  assert.equal(rowColour('none', vars), 'none');
+  assert.equal(rowColour('mix', vars), '#f9f9f9'); // halfway between white and #f3f3f3
+  assert.equal(mixHex('#000000', '#ffffff', 0.5), '#808080');
+  assert.equal(rowColour('#ABCDEF', vars), '#ABCDEF');
+  const state = normalize(plan([bar('A', 'plan', '1s')]));
+  assert.deepEqual(state.gantt.rows, ['surface', 'none']);
+  assert.doesNotMatch(toMermaid(state), /row-colours/); // default: nothing extra
+  state.gantt.rows = ['surface', 'mix'];
+  const code = toMermaid(state);
+  assert.match(code, /%% row-colours surface,mix\n/);
+  assert.deepEqual(parseMermaid(code).timeline.gantt.rows, ['surface', 'mix']);
+  assert.deepEqual(normalize({ gantt: { rows: ['bogus', '#123456'] } }).gantt.rows, ['surface', '#123456']);
+});

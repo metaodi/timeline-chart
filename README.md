@@ -37,6 +37,8 @@ data.
 - **Sections** (teams, epics, workstreams) contain **bars**, **milestones** ◆ and **deadlines** (vertical line).
 - **Status**: planned, in progress (outlined), done (faded), critical (red).
 - Change a duration or the plan start and everything that follows moves with it.
+- **Row stripes**: the alternating row colours are configurable next to the plan start – *Standard* (grey / none),
+  *Subtle grey* (grey / a lighter grey mixed from the theme), *No stripes*, or two custom colours.
 - **Width**: the chart width grows with the plan (about 40px per week, 1000–4000px, Mermaid `useWidth`). On desktop
   the preview shows it at full width and scrolls horizontally; **⤢ Wide** hides the editor so the chart can use the
   whole window. On phones it scales down (zoom for details).

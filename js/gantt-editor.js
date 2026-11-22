@@ -3,8 +3,8 @@
  * epics…) and tasks defined by a start rule and a duration. Concrete dates are
  * computed by scheduleGantt() and shown under each task.
  */
-import { TASK_TYPES, STATUSES, DURATION_UNITS, SECTION_COLOURS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
-import { themeVars } from './themes.js';
+import { TASK_TYPES, STATUSES, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
+import { themeVars, rowColour, themeColour } from './themes.js';
 import { formatDate, isoDate, nextName } from './generator.js';
 
 const esc = (s) =>
@@ -164,6 +164,24 @@ export function createGanttEditor(root, api) {
       .join('');
   }
 
+  /** Row stripes: preset + two colour pickers. */
+  function rowsHtml() {
+    const vars = themeVars(api.getState().theme);
+    const rows = g().rows;
+    const preset = Object.entries(ROW_PRESETS).find(([, p]) => p.rows.join() === rows.join())?.[0] ?? 'custom';
+    const picker = (i) => {
+      const c = rowColour(rows[i], vars);
+      const value = c === 'none' ? themeColour(vars, '--pele-bg') : c;
+      return `<input type="color" data-grows="${i}" value="${value}" title="Row colour ${i + 1}" aria-label="Row colour ${i + 1}" />`;
+    };
+    return `<div class="grows">
+      <span class="muted small">Rows</span>
+      <select data-grows="preset" aria-label="Row stripes">
+        ${Object.entries(ROW_PRESETS).map(([id, p]) => option(id, p.label, id === preset)).join('')}
+        ${option('custom', 'Custom', preset === 'custom')}
+      </select>${picker(0)}${picker(1)}</div>`;
+  }
+
   function calendarHtml({ cal }) {
     const c = g().calendar;
     const opt = (key, label) =>
@@ -184,6 +202,7 @@ export function createGanttEditor(root, api) {
         </div>
       </details>
       <div class="gcal-opts">${opt('showPIs', 'Show PIs')}${opt('showSprints', 'Show sprints')}</div>
+      ${rowsHtml()}
     </div>`;
   }
 
@@ -398,6 +417,15 @@ export function createGanttEditor(root, api) {
 
   function onChange(ev) {
     const el = ev.target;
+    if (el.dataset.grows) {
+      const which = el.dataset.grows;
+      if (which === 'preset') {
+        if (ROW_PRESETS[el.value]) api.change(() => (g().rows = [...ROW_PRESETS[el.value].rows]));
+      } else {
+        api.change(() => (g().rows[Number(which)] = el.value.toLowerCase()));
+      }
+      return;
+    }
     if (el.dataset.gopt) {
       api.snapshot();
       g()[el.dataset.gopt] = el.checked;

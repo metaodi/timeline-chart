@@ -49,6 +49,15 @@ export const STATUSES = [
 const CAL_KEY = 'sprint-calendar';
 const PLAN_KEY = 'sprint-plan';
 const COLOURS_KEY = 'section-colours';
+const ROWS_KEY = 'row-colours';
+
+/** Row stripe presets: [first row, second row] (see rowColour() in themes.js). */
+export const ROW_PRESETS = {
+  standard: { label: 'Standard', rows: ['surface', 'none'] },
+  subtle: { label: 'Subtle grey', rows: ['surface', 'mix'] },
+  plain: { label: 'No stripes', rows: ['none', 'none'] },
+};
+const isRowToken = (t) => ['none', 'surface', 'mix'].includes(t) || /^#[0-9a-f]{6}$/i.test(t ?? '');
 const isSprintRef = (ref) => /^s\d+$/.test(ref ?? '');
 const isDate = (ref) => /^\d{4}-\d{2}-\d{2}$/.test(ref ?? '');
 
@@ -57,6 +66,7 @@ export function emptyGantt() {
     calendar: { ...DEFAULT_CALENDAR, startDate: '' },
     showPIs: true,
     showSprints: true,
+    rows: [...ROW_PRESETS.standard.rows], // zebra stripes of the chart rows
     excludeWeekends: false, // kept for imported charts; no UI (clean look)
     todayMarker: false,
     sections: [],
@@ -125,6 +135,7 @@ export function normalizeGantt(g) {
   const d = { ...base, ...(g || {}) };
   d.calendar = { ...DEFAULT_CALENDAR, ...(d.calendar || {}) };
   for (const k of ['showPIs', 'showSprints', 'excludeWeekends', 'todayMarker']) d[k] = Boolean(d[k]);
+  d.rows = [0, 1].map((i) => (isRowToken(d.rows?.[i]) ? d.rows[i].toLowerCase() : ROW_PRESETS.standard.rows[i]));
   d.pis = Array.isArray(d.pis) ? normalizePlan(d.pis) : sprintPlanFromConfig(d.calendar);
   // every sprint needs a unique id (tasks reference them)
   const seen = new Set();
@@ -347,6 +358,8 @@ export function toGanttMermaid(t, frontmatter = []) {
     }
   }
   if (g.sections.some((s) => s.color)) out.push(`  %% ${COLOURS_KEY} ${g.sections.map((s) => s.color || 0).join(',')}`);
+  const rows = g.rows ?? ROW_PRESETS.standard.rows;
+  if (rows.join() !== ROW_PRESETS.standard.rows.join()) out.push(`  %% ${ROWS_KEY} ${rows.join(',')}`);
   g.sections.forEach((s, si) => {
     const lines = s.tasks.map((task, ti) => taskLine(task, dates[si][ti], `g${si}t${ti}`)).filter(Boolean);
     out.push(`  section ${escapeGanttText(s.name) || '&nbsp;'}`, ...lines);
@@ -422,7 +435,10 @@ export function parseGanttMermaid(code) {
       if (!line) return;
       if (line.startsWith('%%')) {
         if (line.includes(CAL_KEY)) g.calendar = readCalendarComment(line);
-        else if (line.includes(COLOURS_KEY)) {
+        else if (line.includes(ROWS_KEY)) {
+          const rows = line.slice(line.indexOf(ROWS_KEY) + ROWS_KEY.length).split(',').map((x) => x.trim());
+          if (rows.length === 2 && rows.every(isRowToken)) g.rows = rows;
+        } else if (line.includes(COLOURS_KEY)) {
           colours = line.slice(line.indexOf(COLOURS_KEY) + COLOURS_KEY.length).split(',').map((x) => Number(x.trim()) || 0);
         } else if (line.includes(PLAN_KEY)) {
           try {

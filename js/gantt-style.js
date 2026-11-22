@@ -8,7 +8,7 @@
  * gantt.js: "pi1", "s3" (sprints) and "g0t2" (section 0, task 2).
  */
 import { calendarOf, sectionColour } from './gantt.js';
-import { themeVars } from './themes.js';
+import { themeVars, rowColour } from './themes.js';
 
 const CHAR_WIDTH = 0.56; // average glyph width relative to the font size
 
@@ -60,6 +60,10 @@ export function styleGantt(svg, state) {
     rows.get(y).push(num(rect, 'x'));
   }
   const right = num(svg, 'width') || svg.viewBox?.baseVal?.width || Infinity;
+
+  // Zebra stripes of the rows (configurable in the editor)
+  const rowsCfg = state.gantt.rows ?? ['surface', 'none'];
+  svg.querySelectorAll('rect.pele-section').forEach((band, i) => band.setAttribute('fill', rowColour(rowsCfg[i % 2], vars)));
 
   for (const g of tasks) {
     const k = seriesFor(g.dataset.id, state.gantt, cal);

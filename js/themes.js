@@ -78,6 +78,31 @@ export function themeVars(theme, singleColour = false) {
   return vars;
 }
 
+/** Pele's built-in values for variables a preset does not set. */
+const PELE_DEFAULTS = { '--pele-bg': '#ffffff', '--pele-surface': '#f3f3f3' };
+
+export const themeColour = (vars, name) => vars[name] ?? PELE_DEFAULTS[name];
+
+/** Mix two #rrggbb colours (t = share of b). */
+export function mixHex(a, b, t = 0.5) {
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [rgb(a), rgb(b)];
+  return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Colour of a Gantt row stripe: "none" (background shows through), "surface"
+ * (the theme's light grey), "mix" (halfway between background and surface: a
+ * very subtle grey) or a #rrggbb colour.
+ */
+export function rowColour(token, vars) {
+  if (token === 'none') return 'none';
+  const surface = themeColour(vars, '--pele-surface');
+  if (token === 'surface') return surface;
+  if (token === 'mix') return mixHex(themeColour(vars, '--pele-bg'), surface, 0.5);
+  return /^#[0-9a-f]{6}$/i.test(token) ? token : surface;
+}
+
 export function applyVars(el, vars) {
   for (const [k, v] of Object.entries(vars)) el.style.setProperty(k, v);
 }
