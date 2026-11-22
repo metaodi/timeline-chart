@@ -50,6 +50,7 @@ const CAL_KEY = 'sprint-calendar';
 const PLAN_KEY = 'sprint-plan';
 const COLOURS_KEY = 'section-colours';
 const ROWS_KEY = 'row-colours';
+const NOTES_KEY = 'notes';
 
 /** Row stripe presets: [first row, second row] (see rowColour() in themes.js). */
 export const ROW_PRESETS = {
@@ -67,6 +68,7 @@ export function emptyGantt() {
     showPIs: true,
     showSprints: true,
     rows: [...ROW_PRESETS.standard.rows], // zebra stripes of the chart rows
+    showNotes: true, // numbered notes below the chart
     excludeWeekends: false, // kept for imported charts; no UI (clean look)
     todayMarker: false,
     sections: [],
@@ -135,6 +137,7 @@ export function normalizeGantt(g) {
   const d = { ...base, ...(g || {}) };
   d.calendar = { ...DEFAULT_CALENDAR, ...(d.calendar || {}) };
   for (const k of ['showPIs', 'showSprints', 'excludeWeekends', 'todayMarker']) d[k] = Boolean(d[k]);
+  d.showNotes = d.showNotes !== false;
   d.rows = [0, 1].map((i) => (isRowToken(d.rows?.[i]) ? d.rows[i].toLowerCase() : ROW_PRESETS.standard.rows[i]));
   d.pis = Array.isArray(d.pis) ? normalizePlan(d.pis) : sprintPlanFromConfig(d.calendar);
   // every sprint needs a unique id (tasks reference them)
@@ -157,6 +160,8 @@ export function normalizeGantt(g) {
               status: statuses.includes(t?.status) ? t.status : '',
               from: String(t?.from || 'prev'),
               duration: /^\d+[swd]$/.test(t?.duration ?? '') ? t.duration : '',
+              note: String(t?.note ?? ''), // details: tooltip + footnote (gantt-notes.js)
+              link: String(t?.link ?? '').trim(), // URL: the entry becomes a link (Mermaid "click … href")
               to: String(t?.to ?? ''),
             }))
           : [],
@@ -378,6 +383,10 @@ export function toGanttMermaid(t, frontmatter = []) {
   if (g.sections.some((s) => s.color)) out.push(`  %% ${COLOURS_KEY} ${g.sections.map((s) => s.color || 0).join(',')}`);
   const rows = g.rows ?? ROW_PRESETS.standard.rows;
   if (rows.join() !== ROW_PRESETS.standard.rows.join()) out.push(`  %% ${ROWS_KEY} ${rows.join(',')}`);
+  // notes are not part of Mermaid: kept as a comment ({"g0t1": "…"}) so importing restores them
+  const notes = {};
+  g.sections.forEach((s, si) => s.tasks.forEach((t, ti) => t.note?.trim() && (notes[`g${si}t${ti}`] = t.note.trim())));
+  if (Object.keys(notes).length) out.push(`  %% ${NOTES_KEY} ${JSON.stringify(notes)}${g.showNotes === false ? ' hidden' : ''}`);
   g.sections.forEach((s, si) => {
     const lines = s.tasks
       .map((task, ti) => {
@@ -394,6 +403,12 @@ export function toGanttMermaid(t, frontmatter = []) {
       .filter(Boolean);
     out.push(`  section ${escapeGanttText(s.name) || '&nbsp;'}`, ...lines);
   });
+  // links: standard Mermaid, so they also work in other Mermaid tools
+  g.sections.forEach((s, si) =>
+    s.tasks.forEach((t, ti) => {
+      if (t.link?.trim() && dates[si][ti]) out.push(`  click g${si}t${ti} href "${t.link.trim().replace(/"/g, '%22')}"`);
+    }),
+  );
   return out.join('\n') + '\n';
 }
 
@@ -455,6 +470,8 @@ export function parseGanttMermaid(code) {
   let prevEnd = null;
   let seenHeader = false;
   let colours = [];
+  let notes = {};
+  const links = {};
 
   String(code)
     .replace(/\r\n?/g, '\n')
@@ -465,7 +482,15 @@ export function parseGanttMermaid(code) {
       if (!line) return;
       if (line.startsWith('%%')) {
         if (line.includes(CAL_KEY)) g.calendar = readCalendarComment(line);
-        else if (line.includes(ROWS_KEY)) {
+        else if (line.startsWith(`%% ${NOTES_KEY} `)) {
+          const body = line.slice(`%% ${NOTES_KEY} `.length).trim();
+          try {
+            notes = JSON.parse(body.replace(/\s+hidden$/, ''));
+            if (/\s+hidden$/.test(body)) g.showNotes = false;
+          } catch {
+            res.warnings.push(`Line ${i + 1}: could not read the notes`);
+          }
+        } else if (line.includes(ROWS_KEY)) {
           const rows = line.slice(line.indexOf(ROWS_KEY) + ROWS_KEY.length).split(',').map((x) => x.trim());
           if (rows.length === 2 && rows.every(isRowToken)) g.rows = rows;
         } else if (line.includes(COLOURS_KEY)) {
@@ -493,7 +518,9 @@ export function parseGanttMermaid(code) {
         if (m[1].trim() !== 'YYYY-MM-DD') res.warnings.push(`Line ${i + 1}: only dateFormat YYYY-MM-DD is supported`);
       } else if (/^excludes\s+.*weekends/i.test(line)) g.excludeWeekends = true;
       else if (/^todayMarker\s+off/i.test(line)) g.todayMarker = false;
-      else if (/^(axisFormat|tickInterval|weekday|weekend|inclusiveEndDates|includes|excludes|topAxis|displayMode|click|classDef|class)\b/i.test(line)) {
+      else if ((m = line.match(/^click\s+(\S+)\s+href\s+"([^"]*)"/i))) {
+        for (const id of m[1].split(',')) links[id.trim()] = m[2];
+      } else if (/^(axisFormat|tickInterval|weekday|weekend|inclusiveEndDates|includes|excludes|topAxis|displayMode|click|classDef|class)\b/i.test(line)) {
         /* layout options this app sets itself */
       } else if ((m = line.match(/^section\s+(.*)$/i))) {
         section = { name: unescape(m[1]), tasks: [] };
@@ -559,6 +586,12 @@ export function parseGanttMermaid(code) {
     });
 
   g.sections.forEach((sec, i) => (sec.color = colours[i] || 0));
+  g.sections.forEach((sec, si) =>
+    sec.tasks.forEach((t, ti) => {
+      t.note = String(notes[`g${si}t${ti}`] ?? '');
+      t.link = String(links[`g${si}t${ti}`] ?? '');
+    }),
+  );
   snapToSprints(g);
   if (!seenHeader) res.warnings.unshift('No "gantt" header found');
   return res;

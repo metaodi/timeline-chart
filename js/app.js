@@ -7,6 +7,7 @@ import { sortable, moveBetween } from './drag.js';
 import { styleGantt } from './gantt-style.js';
 import { peleCss } from './pele-css.js';
 import { alignTitle } from './svg-title.js';
+import { addNotes } from './gantt-notes.js';
 import { emptyGantt, newGanttSection } from './gantt.js';
 import { toMermaid, normalize, isEmpty, newPeriod, newSection, THEMES, KINDS, getKind, stripKind, setKind } from './model.js';
 import { parseMermaid } from './parser.js';
@@ -392,6 +393,11 @@ function previewOptions() {
       const svg = $('#preview svg.pele');
       insideLabels = styleGantt(svg, state);
       alignTitle(svg, state.titleAlign);
+      if (state.mode === 'gantt') {
+        addNotes(svg, state);
+        // the notes make the chart taller: let Pele's zoom pick up the new size
+        queueMicrotask(() => mounted?.zoom?.refresh());
+      }
       if (codeTab === 'css') showCode(); // the CSS depends on the layout (labels on bars)
     },
   };
@@ -452,6 +458,7 @@ function exportSvg() {
     applyVars(el, vars);
     styleGantt(el, state);
     alignTitle(el, state.titleAlign);
+    if (state.mode === 'gantt') addNotes(el, state);
     const background = $('#transparent').checked ? null : vars['--pele-bg'];
     return { el, background };
   } catch (err) {
