@@ -1,0 +1,546 @@
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.3.0/dist/mermaid.esm.min.mjs';
+import { toMermaid, normalize, isEmpty, newPeriod, newSection, THEMES, KINDS, getKind, stripKind, setKind } from './model.js';
+import { parseMermaid } from './parser.js';
+import { generateSprints } from './generator.js';
+import { EXAMPLES, DEFAULT_EXAMPLE } from './examples.js';
+import { downloadSvg, downloadPng, copyText } from './export.js';
+import { loadLocal, saveLocal, encodeShare, decodeShare } from './storage.js';
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+// ---------------------------------------------------------------------------
+// State + undo history
+// ---------------------------------------------------------------------------
+
+let state = normalize(parseMermaid(EXAMPLES[DEFAULT_EXAMPLE]).timeline);
+const past = [];
+const future = [];
+let typingBurst = null;
+
+function snapshot() {
+  const s = JSON.stringify(state);
+  if (past[past.length - 1] !== s) past.push(s);
+  if (past.length > 100) past.shift();
+  future.length = 0;
+  updateHistoryButtons();
+}
+
+/** Record history once per burst of typing instead of on every keystroke. */
+function snapshotTyping() {
+  if (!typingBurst) snapshot();
+  clearTimeout(typingBurst);
+  typingBurst = setTimeout(() => (typingBurst = null), 800);
+}
+
+function undo() {
+  if (!past.length) return;
+  future.push(JSON.stringify(state));
+  state = JSON.parse(past.pop());
+  refreshAll();
+}
+
+function redo() {
+  if (!future.length) return;
+  past.push(JSON.stringify(state));
+  state = JSON.parse(future.pop());
+  refreshAll();
+}
+
+function updateHistoryButtons() {
+  $('#undo').disabled = past.length === 0;
+  $('#redo').disabled = future.length === 0;
+}
+
+/** Apply a structural change: snapshot, mutate, re-render the editor. */
+function change(mutator, focusSelector) {
+  snapshot();
+  mutator(state);
+  renderTree();
+  update();
+  if (focusSelector) {
+    const el = $(focusSelector);
+    if (el) {
+      el.focus();
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Editor tree
+// ---------------------------------------------------------------------------
+
+const periodsOf = (g) => (g === 'u' ? state.periods : state.sections[Number(g)].periods);
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+}
+
+const iconBtn = (action, label, glyph, extra = '') =>
+  `<button type="button" class="ibtn ${extra}" data-action="${action}" title="${label}" aria-label="${label}">${glyph}</button>`;
+
+const kindIcon = (id) => KINDS.find((k) => k.id === id)?.icon || '•';
+
+/** Native <select> (good on touch devices) laid invisibly over an icon. */
+function kindSelect(text, label) {
+  const current = getKind(text);
+  return `<span class="kind" title="${label}"><span class="kind-icon" aria-hidden="true">${kindIcon(current)}</span><select data-kind aria-label="${label}">${KINDS.map(
+    (k) => `<option value="${k.id}"${k.id === current ? ' selected' : ''}>${k.icon || '•'} ${k.label}</option>`,
+  ).join('')}</select></span>`;
+}
+
+function eventHtml(g, p, e, text) {
+  return `<li class="event kind-${getKind(text)}" data-e="${e}">
+    ${kindSelect(text, 'Item type')}
+    <textarea rows="1" data-field="event" data-g="${g}" data-p="${p}" data-e="${e}" placeholder="Story, feature, milestone…">${esc(stripKind(text))}</textarea>
+    <span class="tools">${iconBtn('event-up', 'Move up', '↑')}${iconBtn('event-down', 'Move down', '↓')}${iconBtn('event-delete', 'Delete item', '✕', 'del')}</span>
+  </li>`;
+}
+
+function periodHtml(g, p, period) {
+  return `<div class="period" data-p="${p}">
+    <div class="period-head kind-${getKind(period.label)}">
+      ${kindSelect(period.label, 'Period type')}
+      <textarea rows="1" class="label" data-field="label" data-g="${g}" data-p="${p}" placeholder="Period, e.g. Sprint 1 / Jan / v1.2">${esc(stripKind(period.label))}</textarea>
+      <span class="tools">${iconBtn('period-up', 'Move period up', '↑')}${iconBtn('period-down', 'Move period down', '↓')}${iconBtn('period-dup', 'Duplicate period', '⧉')}${iconBtn('period-delete', 'Delete period', '✕', 'del')}</span>
+    </div>
+    <ul class="events">${period.events.map((e, i) => eventHtml(g, p, i, e)).join('')}</ul>
+    <button type="button" class="add-event" data-action="add-event">+ Item</button>
+  </div>`;
+}
+
+function groupHtml(g, title, periods, isSection) {
+  const head = isSection
+    ? `<div class="group-head">
+        <textarea rows="1" class="section-name" data-field="section" data-g="${g}" placeholder="Section, e.g. PI 2026.1 / Q1">${esc(title)}</textarea>
+        <span class="tools">${iconBtn('section-up', 'Move section up', '↑')}${iconBtn('section-down', 'Move section down', '↓')}${iconBtn('section-dup', 'Duplicate section', '⧉')}${iconBtn('section-delete', 'Delete section', '✕', 'del')}</span>
+      </div>`
+    : `<div class="group-head"><strong class="group-title">Without section</strong>
+        <span class="muted small">Shown before all sections</span></div>`;
+  return `<div class="group card ${isSection ? 'section' : 'ungrouped'}" data-g="${g}">
+    ${head}
+    <div class="periods">${periods.map((p, i) => periodHtml(g, i, p)).join('')}</div>
+    <button type="button" class="btn small" data-action="add-period">+ Period (sprint, month…)</button>
+  </div>`;
+}
+
+function renderTree() {
+  const parts = [];
+  if (state.periods.length) parts.push(groupHtml('u', '', state.periods, false));
+  state.sections.forEach((s, i) => parts.push(groupHtml(String(i), s.name, s.periods, true)));
+  if (!parts.length) parts.push('<p class="empty card">Start with a section (e.g. a PI) or use <b>⚙︎ Sprints / PIs</b> to generate a sprint calendar.</p>');
+  $('#tree').innerHTML = parts.join('');
+  $$('#tree textarea').forEach(autosize);
+}
+
+function autosize(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
+}
+
+function locate(el) {
+  const g = el.closest('[data-g]')?.dataset.g;
+  const p = el.closest('[data-p]')?.dataset.p;
+  const e = el.closest('[data-e]')?.dataset.e;
+  return { g, p: p === undefined ? undefined : Number(p), e: e === undefined ? undefined : Number(e) };
+}
+
+function move(arr, i, delta) {
+  const j = i + delta;
+  if (j < 0 || j >= arr.length) return false;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  return true;
+}
+
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const sel = {
+  section: (g) => `[data-field="section"][data-g="${g}"]`,
+  label: (g, p) => `[data-field="label"][data-g="${g}"][data-p="${p}"]`,
+  event: (g, p, e) => `[data-field="event"][data-g="${g}"][data-p="${p}"][data-e="${e}"]`,
+};
+
+const actions = {
+  'add-section': () => {
+    const g = state.sections.length;
+    change((s) => s.sections.push(newSection()), sel.section(g));
+  },
+  'add-ungrouped': () => {
+    const p = state.periods.length;
+    change((s) => s.periods.push(newPeriod()), sel.label('u', p));
+  },
+  'section-up': ({ g }) => change((s) => move(s.sections, Number(g), -1)),
+  'section-down': ({ g }) => change((s) => move(s.sections, Number(g), 1)),
+  'section-dup': ({ g }) => change((s) => s.sections.splice(Number(g) + 1, 0, clone(s.sections[g])), sel.section(Number(g) + 1)),
+  'section-delete': ({ g }) => change((s) => s.sections.splice(Number(g), 1)),
+  'add-period': ({ g }) => {
+    const p = periodsOf(g).length;
+    change(() => periodsOf(g).push(newPeriod()), sel.label(g, p));
+  },
+  'period-up': ({ g, p }) => change(() => move(periodsOf(g), p, -1)),
+  'period-down': ({ g, p }) => change(() => move(periodsOf(g), p, 1)),
+  'period-dup': ({ g, p }) => change(() => periodsOf(g).splice(p + 1, 0, clone(periodsOf(g)[p])), sel.label(g, p + 1)),
+  'period-delete': ({ g, p }) => change(() => periodsOf(g).splice(p, 1)),
+  'add-event': ({ g, p }) => {
+    const e = periodsOf(g)[p].events.length;
+    change(() => periodsOf(g)[p].events.push(''), sel.event(g, p, e));
+  },
+  'event-up': ({ g, p, e }) => change(() => move(periodsOf(g)[p].events, e, -1)),
+  'event-down': ({ g, p, e }) => change(() => move(periodsOf(g)[p].events, e, 1)),
+  'event-delete': ({ g, p, e }) => change(() => periodsOf(g)[p].events.splice(e, 1)),
+};
+
+function onAction(ev) {
+  const btn = ev.target.closest('[data-action]');
+  if (!btn) return;
+  actions[btn.dataset.action]?.(locate(btn));
+}
+
+function onTreeInput(ev) {
+  const ta = ev.target;
+  const field = ta.dataset.field;
+  if (!field) return;
+  autosize(ta);
+  snapshotTyping();
+  const { g, p, e } = locate(ta);
+  const kind = ta.closest('.event, .period-head')?.querySelector('[data-kind]')?.value;
+  if (field === 'section') state.sections[Number(g)].name = ta.value;
+  else if (field === 'label') periodsOf(g)[p].label = setKind(ta.value, kind);
+  else if (field === 'event') periodsOf(g)[p].events[e] = setKind(ta.value, kind);
+  update();
+}
+
+/** Changing an item type re-applies the emoji prefix to the text. */
+function onTreeChange(ev) {
+  const select = ev.target;
+  if (!select.matches('[data-kind]')) return;
+  const row = select.closest('.event, .period-head');
+  const ta = row.querySelector('textarea');
+  const { g, p, e } = locate(ta);
+  snapshot();
+  if (ta.dataset.field === 'label') periodsOf(g)[p].label = setKind(ta.value, select.value);
+  else periodsOf(g)[p].events[e] = setKind(ta.value, select.value);
+  row.className = row.className.replace(/\bkind-\S+/, `kind-${select.value}`);
+  row.querySelector('.kind-icon').textContent = kindIcon(select.value);
+  update();
+}
+
+/** Enter = next item, Shift+Enter = line break, Backspace on empty item = delete it. */
+function onTreeKeydown(ev) {
+  const ta = ev.target;
+  const field = ta.dataset?.field;
+  if (!field || ev.isComposing) return;
+  const { g, p, e } = locate(ta);
+  if (ev.key === 'Enter' && !ev.shiftKey) {
+    ev.preventDefault();
+    if (field === 'section') {
+      if (!periodsOf(g).length) actions['add-period']({ g });
+      else $(sel.label(g, 0))?.focus();
+    } else if (field === 'label') {
+      change(() => periodsOf(g)[p].events.splice(0, 0, ''), sel.event(g, p, 0));
+    } else if (field === 'event') {
+      change(() => periodsOf(g)[p].events.splice(e + 1, 0, ''), sel.event(g, p, e + 1));
+    }
+  } else if (ev.key === 'Backspace' && field === 'event' && ta.value === '') {
+    ev.preventDefault();
+    const target = e > 0 ? sel.event(g, p, e - 1) : sel.label(g, p);
+    change(() => periodsOf(g)[p].events.splice(e, 1), target);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Settings form
+// ---------------------------------------------------------------------------
+
+function renderSettings() {
+  $('#title').value = state.title;
+  $$('input[name="direction"]').forEach((r) => (r.checked = r.value === state.direction));
+  $('#theme').value = state.theme;
+  $('#multicolor').checked = !state.disableMulticolor;
+  $('#accTitle').value = state.accTitle;
+  $('#accDescr').value = state.accDescr;
+}
+
+function bindSettings() {
+  $('#theme').innerHTML = THEMES.map((t) => `<option value="${t}">${t[0].toUpperCase() + t.slice(1)}</option>`).join('');
+  const onText = (key) => (ev) => {
+    snapshotTyping();
+    state[key] = ev.target.value;
+    update();
+  };
+  $('#title').addEventListener('input', onText('title'));
+  $('#accTitle').addEventListener('input', onText('accTitle'));
+  $('#accDescr').addEventListener('input', onText('accDescr'));
+  $$('input[name="direction"]').forEach((r) =>
+    r.addEventListener('change', () => {
+      snapshot();
+      state.direction = r.value;
+      update();
+    }),
+  );
+  $('#theme').addEventListener('change', (ev) => {
+    snapshot();
+    state.theme = ev.target.value;
+    update();
+  });
+  $('#multicolor').addEventListener('change', (ev) => {
+    snapshot();
+    state.disableMulticolor = !ev.target.checked;
+    update();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Preview
+// ---------------------------------------------------------------------------
+
+mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true });
+
+let renderSeq = 0;
+let renderTimer = null;
+let currentCode = '';
+
+function update() {
+  currentCode = toMermaid(state);
+  $('#code').textContent = currentCode;
+  saveLocal(state);
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(renderPreview, 150);
+  updateHistoryButtons();
+}
+
+async function renderPreview() {
+  const seq = ++renderSeq;
+  const preview = $('#preview');
+  const error = $('#error');
+  if (isEmpty(state)) {
+    preview.innerHTML = '<p class="muted placeholder">Add a period to see the timeline.</p>';
+    error.hidden = true;
+    return;
+  }
+  try {
+    const { svg } = await mermaid.render(`tl-${seq}`, currentCode);
+    if (seq !== renderSeq) return;
+    preview.innerHTML = svg;
+    preview.dataset.theme = state.theme;
+    error.hidden = true;
+  } catch (err) {
+    if (seq !== renderSeq) return;
+    error.textContent = `Mermaid could not render this timeline: ${err?.message || err}`;
+    error.hidden = false;
+  } finally {
+    // mermaid leaves a temporary container behind on errors
+    document.getElementById(`dtl-${seq}`)?.remove();
+  }
+}
+
+function exportBackground() {
+  if ($('#transparent').checked) return null;
+  return state.theme === 'dark' ? '#333333' : '#ffffff';
+}
+
+function currentSvg() {
+  const svg = $('#preview svg');
+  if (!svg) toast('Nothing to export yet');
+  return svg;
+}
+
+// ---------------------------------------------------------------------------
+// Misc UI: toast, views (mobile tabs), dialogs
+// ---------------------------------------------------------------------------
+
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.hidden = true), 2200);
+}
+
+function setView(view) {
+  $('.layout').dataset.view = view;
+  $$('.tabbar button').forEach((b) => b.toggleAttribute('aria-current', b.dataset.view === view));
+  if (view === 'edit') $$('#tree textarea').forEach(autosize);
+  window.scrollTo({ top: 0 });
+}
+
+function loadTimeline(t) {
+  snapshot();
+  state = normalize(t);
+  refreshAll();
+}
+
+function refreshAll() {
+  renderSettings();
+  renderTree();
+  update();
+}
+
+function bindDialogs() {
+  // Import
+  const imp = $('#import-dialog');
+  $('#open-import').addEventListener('click', () => {
+    $('#import-text').value = '';
+    $('#import-warnings').hidden = true;
+    imp.showModal();
+    $('#import-text').focus();
+  });
+  $('#import-ok').addEventListener('click', (ev) => {
+    const { timeline, warnings } = parseMermaid($('#import-text').value);
+    if (isEmpty(timeline) && warnings.length) {
+      ev.preventDefault();
+      $('#import-warnings').textContent = warnings.join('\n');
+      $('#import-warnings').hidden = false;
+      return;
+    }
+    loadTimeline(timeline);
+    toast(warnings.length ? `Imported with ${warnings.length} warning(s)` : 'Imported');
+  });
+
+  // Generator
+  const gen = $('#gen-dialog');
+  const form = $('#gen-form');
+  $('#open-generator').addEventListener('click', () => {
+    if (!form.startDate.value) form.startDate.value = nextMonday();
+    form.mode.value = isEmpty(state) ? 'replace' : 'append';
+    gen.showModal();
+  });
+  form.addEventListener('submit', (ev) => {
+    if (ev.submitter?.value !== 'ok') return;
+    const f = new FormData(form);
+    const sections = generateSprints({
+      startDate: f.get('startDate'),
+      sprintWeeks: Number(f.get('sprintWeeks')),
+      sprintCount: Number(f.get('sprintCount')),
+      sprintsPerPI: Number(f.get('sprintsPerPI')),
+      firstSprint: Number(f.get('firstSprint')),
+      firstPI: f.get('firstPI'),
+      sprintPrefix: f.get('sprintPrefix') || 'Sprint',
+      piPrefix: f.get('piPrefix') || 'PI',
+      dateStyle: f.get('dateStyle'),
+      ipIteration: f.get('ipIteration') === 'on',
+    });
+    change((s) => {
+      if (f.get('mode') === 'replace') {
+        s.sections = sections;
+        s.periods = [];
+      } else {
+        s.sections.push(...sections);
+      }
+    });
+    toast(`Generated ${sections.length} section(s)`);
+  });
+
+  // Close dialogs when clicking the backdrop
+  for (const d of [imp, gen]) {
+    d.addEventListener('click', (ev) => {
+      if (ev.target === d) d.close();
+    });
+  }
+}
+
+function nextMonday() {
+  const d = new Date();
+  d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function bindToolbar() {
+  $('#undo').addEventListener('click', undo);
+  $('#redo').addEventListener('click', redo);
+  document.addEventListener('keydown', (ev) => {
+    if (!(ev.ctrlKey || ev.metaKey) || ev.key.toLowerCase() !== 'z' || $('dialog[open]')) return;
+    ev.preventDefault();
+    ev.shiftKey ? redo() : undo();
+  });
+
+  const ex = $('#examples');
+  ex.insertAdjacentHTML('beforeend', Object.keys(EXAMPLES).map((k) => `<option>${esc(k)}</option>`).join(''));
+  ex.addEventListener('change', () => {
+    if (!ex.value) return;
+    loadTimeline(parseMermaid(EXAMPLES[ex.value]).timeline);
+    ex.value = '';
+    toast('Example loaded – undo to go back');
+  });
+
+  $('#clear').addEventListener('click', () => {
+    loadTimeline({ sections: [newSection()] });
+    toast('New timeline – undo to go back');
+    $(sel.section(0))?.focus();
+  });
+
+  $('#share').addEventListener('click', async () => {
+    try {
+      const url = `${location.origin}${location.pathname}#c=${await encodeShare(state)}`;
+      history.replaceState(null, '', url);
+      if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+        await navigator.share({ title: state.title || 'Timeline', url });
+      } else {
+        await copyText(url);
+        toast('Share link copied');
+      }
+    } catch (err) {
+      if (err?.name !== 'AbortError') toast('Could not create share link');
+    }
+  });
+
+  $('#copy-code').addEventListener('click', async () => {
+    try {
+      await copyText(currentCode);
+      toast('Mermaid code copied');
+    } catch {
+      toast('Copy failed – select the code manually');
+    }
+  });
+  $('#dl-svg').addEventListener('click', () => {
+    const svg = currentSvg();
+    if (svg) downloadSvg(svg, state.title, exportBackground());
+  });
+  $('#dl-png').addEventListener('click', async () => {
+    const svg = currentSvg();
+    if (!svg) return;
+    try {
+      await downloadPng(svg, state.title, exportBackground());
+    } catch (err) {
+      toast(err.message);
+    }
+  });
+  $('#fit').addEventListener('click', (ev) => {
+    const fit = $('#preview').classList.toggle('fit');
+    ev.currentTarget.setAttribute('aria-pressed', String(fit));
+    ev.currentTarget.textContent = fit ? 'Fit' : '100%';
+  });
+
+  $$('.tabbar button').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+}
+
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
+
+async function boot() {
+  const hash = location.hash.match(/^#c=(.+)$/);
+  if (hash) {
+    try {
+      state = normalize(await decodeShare(hash[1]));
+    } catch {
+      toast('Share link is invalid');
+    }
+  } else {
+    const saved = loadLocal();
+    if (saved) state = normalize(saved);
+  }
+  bindSettings();
+  bindToolbar();
+  bindDialogs();
+  const tree = $('#tree');
+  tree.addEventListener('input', onTreeInput);
+  tree.addEventListener('keydown', onTreeKeydown);
+  tree.addEventListener('change', onTreeChange);
+  document.addEventListener('click', onAction);
+  window.addEventListener('resize', () => $$('#tree textarea').forEach(autosize));
+  refreshAll();
+}
+
+boot();

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Build Mermaid timelines for sprints, PIs and release trains with a live preview. Export PNG/SVG or copy the Mermaid code." />
+    <meta name="theme-color" content="#4f46e5" />
+    <title>Timeline Builder</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1 class="brand">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22"><path d="M3 12h18M6 8v8M12 6v12M18 9v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+        <span>Timeline Builder</span>
+      </h1>
+      <div class="topbar-actions">
+        <button type="button" class="btn icon" id="undo" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+        <button type="button" class="btn icon" id="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
+        <label class="select-wrap" title="Load an example">
+          <span class="sr-only">Examples</span>
+          <select id="examples"><option value="">Examples…</option></select>
+        </label>
+        <button type="button" class="btn" id="open-generator">⚙︎ Sprints / PIs</button>
+        <button type="button" class="btn" id="open-import">Import code</button>
+        <button type="button" class="btn" id="share">Share link</button>
+        <button type="button" class="btn danger-ghost" id="clear">New</button>
+      </div>
+    </header>
+
+    <main class="layout" data-view="edit">
+      <!-- Editor -->
+      <section class="pane editor-pane" id="pane-edit" aria-label="Editor">
+        <div class="card settings">
+          <label class="field">
+            <span>Title</span>
+            <input id="title" type="text" placeholder="e.g. ART Phoenix – PI 2026.1" autocomplete="off" />
+          </label>
+          <div class="row">
+            <div class="field">
+              <span>Direction</span>
+              <div class="segmented" role="radiogroup" aria-label="Direction">
+                <label><input type="radio" name="direction" value="LR" /><span>Horizontal</span></label>
+                <label><input type="radio" name="direction" value="TD" /><span>Vertical</span></label>
+              </div>
+            </div>
+            <label class="field">
+              <span>Theme</span>
+              <select id="theme"></select>
+            </label>
+          </div>
+          <label class="check"><input type="checkbox" id="multicolor" /> Colour each section differently</label>
+          <details class="more">
+            <summary>Accessibility</summary>
+            <label class="field"><span>Accessible title</span><input id="accTitle" type="text" /></label>
+            <label class="field"><span>Accessible description</span><textarea id="accDescr" rows="2"></textarea></label>
+          </details>
+        </div>
+
+        <div id="tree" class="tree"></div>
+
+        <div class="add-row">
+          <button type="button" class="btn primary" data-action="add-section">+ Section (PI, quarter…)</button>
+          <button type="button" class="btn" data-action="add-ungrouped">+ Period without section</button>
+        </div>
+        <p class="hint">Tip: press <kbd>Enter</kbd> in an item to add the next one, <kbd>Shift</kbd>+<kbd>Enter</kbd> for a line break.</p>
+      </section>
+
+      <!-- Preview -->
+      <section class="pane preview-pane" id="pane-preview" aria-label="Preview">
+        <div class="pane-head">
+          <h2>Preview</h2>
+          <div class="pane-actions">
+            <button type="button" class="btn small" id="fit" aria-pressed="true" title="Fit to width / actual size">Fit</button>
+            <label class="check small"><input type="checkbox" id="transparent" /> Transparent</label>
+            <button type="button" class="btn small" id="dl-svg">SVG</button>
+            <button type="button" class="btn small primary" id="dl-png">PNG</button>
+          </div>
+        </div>
+        <div class="preview fit" id="preview" aria-live="polite"></div>
+        <p class="error" id="error" hidden></p>
+      </section>
+
+      <!-- Code -->
+      <section class="pane code-pane" id="pane-code" aria-label="Mermaid code">
+        <div class="pane-head">
+          <h2>Mermaid code</h2>
+          <div class="pane-actions">
+            <button type="button" class="btn small primary" id="copy-code">Copy code</button>
+          </div>
+        </div>
+        <pre class="code" id="code"></pre>
+      </section>
+    </main>
+
+    <nav class="tabbar" aria-label="Views">
+      <button type="button" data-view="edit" aria-current="page">Edit</button>
+      <button type="button" data-view="preview">Preview</button>
+      <button type="button" data-view="code">Code</button>
+    </nav>
+
+    <!-- Import dialog -->
+    <dialog id="import-dialog" class="dialog">
+      <form method="dialog">
+        <h2>Import Mermaid code</h2>
+        <p class="muted">Paste an existing <code>timeline</code> diagram. It replaces the current timeline.</p>
+        <textarea id="import-text" rows="12" spellcheck="false" placeholder="timeline&#10;  title …&#10;  section …&#10;    Sprint 1 : Story A : Story B"></textarea>
+        <p class="error" id="import-warnings" hidden></p>
+        <div class="dialog-actions">
+          <button value="cancel" class="btn">Cancel</button>
+          <button value="ok" class="btn primary" id="import-ok">Import</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Sprint / PI generator dialog -->
+    <dialog id="gen-dialog" class="dialog">
+      <form method="dialog" id="gen-form">
+        <h2>Generate sprints &amp; PIs</h2>
+        <div class="grid2">
+          <label class="field"><span>First sprint starts</span><input type="date" name="startDate" required /></label>
+          <label class="field"><span>Sprint length (weeks)</span><input type="number" name="sprintWeeks" min="1" max="8" value="2" /></label>
+          <label class="field"><span>Number of sprints</span><input type="number" name="sprintCount" min="1" max="200" value="8" /></label>
+          <label class="field"><span>Sprints per PI <small>(0 = no PIs)</small></span><input type="number" name="sprintsPerPI" min="0" max="20" value="4" /></label>
+          <label class="field"><span>First sprint number</span><input type="number" name="firstSprint" min="0" value="1" /></label>
+          <label class="field"><span>First PI number / name</span><input type="text" name="firstPI" value="1" /></label>
+          <label class="field"><span>Sprint label</span><input type="text" name="sprintPrefix" value="Sprint" /></label>
+          <label class="field"><span>PI label</span><input type="text" name="piPrefix" value="PI" /></label>
+          <label class="field"><span>Dates</span>
+            <select name="dateStyle">
+              <option value="short">5 Jan – 16 Jan</option>
+              <option value="long">5 Jan 2026 – 16 Jan 2026</option>
+              <option value="iso">2026-01-05 – 2026-01-16</option>
+              <option value="none">No dates</option>
+            </select>
+          </label>
+          <label class="field"><span>Insert</span>
+            <select name="mode">
+              <option value="append">Append to timeline</option>
+              <option value="replace">Replace all sections</option>
+            </select>
+          </label>
+        </div>
+        <label class="check"><input type="checkbox" name="ipIteration" checked /> Add an IP iteration (Innovation &amp; Planning) at the end of each PI</label>
+        <div class="dialog-actions">
+          <button value="cancel" class="btn">Cancel</button>
+          <button value="ok" class="btn primary">Generate</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
