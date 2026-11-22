@@ -26,11 +26,10 @@ function luminance(hex) {
 /** 1-based series index for a task id, or null to keep Pele's styling. */
 function seriesFor(id, cal) {
   let m;
-  if ((m = /^pi(\d+)$/.exec(id))) return ((Number(m[1]) - 1) % SERIES) + 1;
-  if ((m = /^s(\d+)$/.exec(id))) {
-    const pi = cal.sprints[Number(m[1]) - 1]?.pi;
-    return pi == null ? 1 : (pi % SERIES) + 1;
-  }
+  const pi = cal.pis.findIndex((p) => p.id === id);
+  if (pi >= 0) return (pi % SERIES) + 1;
+  const sprint = cal.sprints.find((sp) => sp.id === id);
+  if (sprint) return sprint.pi == null ? 1 : (sprint.pi % SERIES) + 1;
   if ((m = /^g(\d+)t\d+$/.exec(id))) return (Number(m[1]) % SERIES) + 1;
   return null;
 }

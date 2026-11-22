@@ -3,7 +3,9 @@
  *
  * Model (state.gantt):
  * {
- *   calendar: { startDate, sprintWeeks, sprintCount, sprintsPerPI, ipIteration, firstSprint, firstPI, sprintPrefix, piPrefix },
+ *   calendar: { startDate, sprintWeeks, sprintCount, sprintsPerPI, ipIteration, restartNumbering, firstSprint, firstPI, sprintPrefix, piPrefix },
+ *   pis: [{ id, name, sprints: [{ id, name, weeks }] }],  // generated from `calendar`, then editable
+ *                                                         // (a PI with an empty name = sprints without PI)
  *   showPIs: boolean,          // a "PIs" row at the top of the chart
  *   showSprints: boolean,      // a "Sprints" row
  *   excludeWeekends: boolean,
@@ -29,7 +31,7 @@
  * durations and, at most, a start date for the whole plan. Changing the
  * calendar or a duration moves everything that follows.
  */
-import { DEFAULT_CALENDAR, sprintCalendar, parseDate, isoDate, addDays } from './generator.js';
+import { DEFAULT_CALENDAR, sprintPlanFromConfig, calendarFromPlan, parseDate, isoDate, addDays } from './generator.js';
 
 export const TASK_TYPES = [
   { id: 'task', icon: '▬', label: 'Bar (spans time)' },
@@ -45,6 +47,7 @@ export const STATUSES = [
 ];
 
 const CAL_KEY = 'sprint-calendar';
+const PLAN_KEY = 'sprint-plan';
 const isSprintRef = (ref) => /^s\d+$/.test(ref ?? '');
 const isDate = (ref) => /^\d{4}-\d{2}-\d{2}$/.test(ref ?? '');
 
@@ -75,11 +78,45 @@ export function newGanttSection(name = '', task = newTask('task', 'plan')) {
   return { name, tasks: [task] };
 }
 
+/** Next free id with a prefix ("s" for sprints, "pi" for PIs) within the sprint plan. */
+function nextPlanId(pis, prefix) {
+  const ids = prefix === 'pi' ? pis.map((p) => p.id) : pis.flatMap((p) => p.sprints.map((x) => x.id));
+  const max = Math.max(0, ...ids.map((id) => Number(new RegExp(`^${prefix}(\\d+)$`).exec(id)?.[1] ?? 0)));
+  return `${prefix}${max + 1}`;
+}
+
+export function newPlanSprint(pis, name = '', weeks = 2) {
+  return { id: nextPlanId(pis, 's'), name, weeks };
+}
+
+export function newPlanPI(pis, name = '', weeks = 2) {
+  return { id: nextPlanId(pis, 'pi'), name, sprints: [newPlanSprint(pis, '', weeks)] };
+}
+
+function normalizePlan(pis) {
+  return pis.map((p, i) => ({
+    id: typeof p?.id === 'string' && p.id ? p.id : `pi${i + 1}`,
+    name: String(p?.name ?? ''),
+    sprints: (Array.isArray(p?.sprints) ? p.sprints : []).map((x) => ({
+      id: String(x?.id ?? ''),
+      name: String(x?.name ?? ''),
+      weeks: Math.max(1, Math.min(12, Math.round(Number(x?.weeks) || 2))),
+    })),
+  }));
+}
+
 export function normalizeGantt(g) {
   const base = emptyGantt();
   const d = { ...base, ...(g || {}) };
   d.calendar = { ...DEFAULT_CALENDAR, ...(d.calendar || {}) };
   for (const k of ['showPIs', 'showSprints', 'excludeWeekends', 'todayMarker']) d[k] = Boolean(d[k]);
+  d.pis = Array.isArray(d.pis) ? normalizePlan(d.pis) : sprintPlanFromConfig(d.calendar);
+  // every sprint needs a unique id (tasks reference them)
+  const seen = new Set();
+  for (const p of d.pis) for (const x of p.sprints) {
+    if (!/^s\d+$/.test(x.id) || seen.has(x.id)) x.id = nextPlanId(d.pis, 's');
+    seen.add(x.id);
+  }
   const types = TASK_TYPES.map((t) => t.id);
   const statuses = STATUSES.map((s) => s.id);
   d.sections = Array.isArray(d.sections)
@@ -101,11 +138,11 @@ export function normalizeGantt(g) {
   return d;
 }
 
-/** The calendar for a gantt model, or an empty one if no start date is set. */
+/** Sprint and PI dates of a gantt model, or an empty calendar if no start date is set. */
 export function calendarOf(g) {
   if (!isDate(g.calendar?.startDate)) return { sprints: [], pis: [] };
   try {
-    return sprintCalendar(g.calendar);
+    return calendarFromPlan(g.calendar.startDate, Array.isArray(g.pis) ? g.pis : sprintPlanFromConfig(g.calendar));
   } catch {
     return { sprints: [], pis: [] };
   }
@@ -225,6 +262,7 @@ function calendarComment(c) {
     `count=${c.sprintCount}`,
     `perPI=${c.sprintsPerPI}`,
     `ip=${c.ipIteration ? 1 : 0}`,
+    `restart=${c.restartNumbering ? 1 : 0}`,
     `firstSprint=${c.firstSprint}`,
     `firstPI=${encodeURIComponent(c.firstPI)}`,
     `sprint=${encodeURIComponent(c.sprintPrefix)}`,
@@ -263,6 +301,9 @@ export function toGanttMermaid(t, frontmatter = []) {
   if (!g.todayMarker) out.push('  todayMarker off');
   if (cal.sprints.length) {
     out.push(calendarComment(g.calendar));
+    // The edited sprint plan, so that importing the code restores it exactly.
+    const plan = (g.pis ?? []).map((p) => ({ id: p.id, name: p.name, sprints: p.sprints.map((x) => [x.id, x.name, x.weeks]) }));
+    out.push(`  %% ${PLAN_KEY} ${JSON.stringify(plan)}`);
     if (g.showPIs && cal.pis.length) {
       out.push(`  section ${escapeGanttText(g.calendar.piPrefix || 'PI')}s`);
       for (const pi of cal.pis) out.push(`    ${escapeGanttText(pi.name)} : ${pi.id}, ${isoDate(pi.start)}, ${isoDate(pi.end)}`);
@@ -303,6 +344,7 @@ function readCalendarComment(line) {
     else if (k === 'count') cal.sprintCount = Number(val);
     else if (k === 'perPI') cal.sprintsPerPI = Number(val);
     else if (k === 'ip') cal.ipIteration = val === '1';
+    else if (k === 'restart') cal.restartNumbering = val === '1';
     else if (k === 'firstSprint') cal.firstSprint = Number(val);
     else if (k === 'firstPI') cal.firstPI = val;
     else if (k === 'sprint') cal.sprintPrefix = val;
@@ -346,6 +388,14 @@ export function parseGanttMermaid(code) {
       if (!line) return;
       if (line.startsWith('%%')) {
         if (line.includes(CAL_KEY)) g.calendar = readCalendarComment(line);
+        else if (line.includes(PLAN_KEY)) {
+          try {
+            const plan = JSON.parse(line.slice(line.indexOf(PLAN_KEY) + PLAN_KEY.length));
+            g.pis = normalizePlan(plan.map((p) => ({ ...p, sprints: p.sprints.map(([id, name, weeks]) => ({ id, name, weeks })) })));
+          } catch {
+            res.warnings.push(`Line ${i + 1}: could not read the sprint plan`);
+          }
+        }
         return;
       }
       if (!seenHeader) {
@@ -429,6 +479,7 @@ export function parseGanttMermaid(code) {
 
 /** Replace dates that fall exactly on sprint boundaries with sprint references. */
 export function snapToSprints(g) {
+  if (!Array.isArray(g.pis)) g.pis = sprintPlanFromConfig(g.calendar);
   const cal = calendarOf(g);
   if (!cal.sprints.length) return g;
   const byStart = new Map(cal.sprints.map((s) => [isoDate(s.start), s.id]));

@@ -272,6 +272,23 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
 .gtask-dates { padding-left: 34px; font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .gtask-dates .warn { color: var(--danger); }
 .gcal-head .field { flex: 0 1 220px; }
+.gplan summary { cursor: pointer; font-weight: 600; padding: 2px 0; }
+.gplan-list { display: grid; gap: 8px; margin-top: 8px; }
+.gpi { background: var(--surface-2); border-radius: 8px; padding: 6px; display: grid; gap: 4px; }
+.gpi-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.gsprint { display: grid; grid-template-columns: minmax(0, 1fr) auto 7.6em auto; align-items: center; gap: 6px; }
+.gsprint .gdates { text-align: right; }
+.gsprints { list-style: none; margin: 0; padding: 0 0 0 12px; display: grid; gap: 2px; }
+.gpi input[type='text'] {
+  flex: 1; min-width: 0; min-height: 32px; padding: 4px 8px;
+  border: 1px solid transparent; border-radius: 6px; background: transparent;
+}
+.gpi input[type='text']:hover { border-color: var(--border); }
+.gpi input[type='text']:focus { border-color: var(--accent); background: var(--surface); outline: none; }
+.gpi-head input[type='text'] { font-weight: 600; }
+.gsprint .weeks { display: inline-flex; align-items: center; gap: 3px; font-size: 0.85rem; color: var(--muted); }
+.gsprint .weeks input { width: 3.4em; min-height: 30px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.gdates { font-size: 0.8rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .gcal-head { align-items: flex-end; }
 .gtask.type-milestone textarea, .gtask.type-deadline textarea { font-weight: 600; }
 .gtask.status-done textarea { color: var(--muted); }
@@ -370,6 +387,11 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
 
   .grid2 { grid-template-columns: 1fr; }
   .gtask-when, .gtask-dates { padding-left: 4px; }
+  .gsprint { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .gsprint input[type='text'] { grid-column: 1 / -1; }
+  .gsprint .gdates { text-align: left; }
+  .gsprints { padding-left: 0; }
+  .gpi input, .gsprint .weeks input { font-size: 16px; }
   .gtask-when select, .gtask-when input { font-size: 16px; min-height: 36px; }
 
   .tabbar {

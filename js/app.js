@@ -7,7 +7,7 @@ import { styleGantt } from './gantt-style.js';
 import { emptyGantt, newGanttSection } from './gantt.js';
 import { toMermaid, normalize, isEmpty, newPeriod, newSection, THEMES, KINDS, getKind, stripKind, setKind } from './model.js';
 import { parseMermaid } from './parser.js';
-import { generateSprints } from './generator.js';
+import { generateSprints, sprintPlanFromConfig } from './generator.js';
 import { EXAMPLES, DEFAULT_EXAMPLE, GANTT_EXAMPLE, nextMonday as nextMondayIso } from './examples.js';
 import { downloadSvg, downloadPng, copyText } from './export.js';
 import { PRESETS, themeVars, applyVars } from './themes.js';
@@ -76,6 +76,7 @@ function change(mutator, focusSelector) {
     const el = $(focusSelector);
     if (el) {
       el.focus();
+      if (el.tagName === 'INPUT' && el.type === 'text') el.select();
       el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   }
@@ -470,12 +471,13 @@ function bindDialogs() {
   const calendarFields = ['startDate', 'sprintWeeks', 'sprintCount', 'sprintsPerPI', 'firstSprint', 'firstPI', 'sprintPrefix', 'piPrefix'];
   openGenerator = () => {
     const isGantt = state.mode === 'gantt';
-    $('#gen-title').textContent = isGantt ? 'Sprint calendar' : 'Generate sprints & PIs';
-    $('#gen-ok').textContent = isGantt ? 'Apply' : 'Generate';
+    $('#gen-title').textContent = isGantt ? 'Generate PIs & sprints' : 'Generate sprints & PIs';
+    $('#gen-ok').textContent = isGantt ? 'Replace PIs & sprints' : 'Generate';
     if (isGantt) {
       const c = state.gantt.calendar;
       calendarFields.forEach((k) => (form[k].value = c[k] ?? ''));
       form.ipIteration.checked = Boolean(c.ipIteration);
+      form.restartNumbering.checked = Boolean(c.restartNumbering);
     }
     if (!form.startDate.value) form.startDate.value = nextMonday();
     form.insert.value = isEmpty(state) ? 'replace' : 'append';
@@ -491,8 +493,11 @@ function bindDialogs() {
         calendarFields.forEach((k) => (c[k] = f.get(k)));
         ['sprintWeeks', 'sprintCount', 'sprintsPerPI', 'firstSprint'].forEach((k) => (c[k] = Number(c[k])));
         c.ipIteration = f.get('ipIteration') === 'on';
+        c.restartNumbering = f.get('restartNumbering') === 'on';
+        // (Re)generate the editable PI / sprint list from the settings
+        s.gantt.pis = sprintPlanFromConfig(c);
       });
-      toast('Sprint calendar updated');
+      toast('PIs and sprints generated – undo to go back');
       return;
     }
     const sections = generateSprints({
@@ -506,6 +511,7 @@ function bindDialogs() {
       piPrefix: f.get('piPrefix') || 'PI',
       dateStyle: f.get('dateStyle'),
       ipIteration: f.get('ipIteration') === 'on',
+      restartNumbering: f.get('restartNumbering') === 'on',
     });
     change((s) => {
       if (f.get('insert') === 'replace') {

@@ -3,8 +3,8 @@
  * epics…) and tasks defined by a start rule and a duration. Concrete dates are
  * computed by scheduleGantt() and shown under each task.
  */
-import { TASK_TYPES, STATUSES, DURATION_UNITS, scheduleGantt, newTask, newGanttSection } from './gantt.js';
-import { formatDate, isoDate } from './generator.js';
+import { TASK_TYPES, STATUSES, DURATION_UNITS, scheduleGantt, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
+import { formatDate, isoDate, nextName } from './generator.js';
 
 const esc = (s) =>
   String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -109,25 +109,82 @@ export function createGanttEditor(root, api) {
     </li>`;
   }
 
+  let planOpen = false; // remember whether the PI/sprint list is expanded
+
+  function planHtml(cal) {
+    const pis = g().pis;
+    const dated = new Map(cal.sprints.map((x) => [x.id, x]));
+    const piDates = new Map(cal.pis.map((x) => [x.id, x]));
+    const range = (a, b) => (a && b ? `${formatDate(a)} – ${formatDate(b)}` : '');
+    return pis
+      .map((pi, i) => {
+        const d = piDates.get(pi.id);
+        const sprints = pi.sprints
+          .map((sp, j) => {
+            const x = dated.get(sp.id);
+            return `<li class="gsprint" data-sp="${j}">
+              <input type="text" data-gpfield="sp-name" value="${esc(sp.name)}" placeholder="Sprint name" aria-label="Sprint name" />
+              <label class="weeks"><input type="number" min="1" max="12" inputmode="numeric" data-gpfield="sp-weeks" value="${sp.weeks}" aria-label="Length in weeks" /> wk</label>
+              <span class="gdates">${x ? range(x.start, x.end) : ''}</span>
+              <span class="tools">${iconBtn('sp-up', 'Move sprint up', '↑')}${iconBtn('sp-down', 'Move sprint down', '↓')}${iconBtn('sp-delete', 'Delete sprint', '✕', 'del')}</span>
+            </li>`;
+          })
+          .join('');
+        return `<div class="gpi" data-pi="${i}">
+          <div class="gpi-head">
+            <input type="text" data-gpfield="pi-name" value="${esc(pi.name)}" placeholder="PI name (empty = no PI)" aria-label="PI name" />
+            <span class="gdates">${d ? range(d.start, d.end) : ''}</span>
+            <span class="tools">${iconBtn('pi-up', 'Move PI up', '↑')}${iconBtn('pi-down', 'Move PI down', '↓')}${iconBtn('pi-delete', 'Delete PI', '✕', 'del')}</span>
+          </div>
+          <ul class="gsprints">${sprints}</ul>
+          <button type="button" class="add-event" data-gaction="sp-add">+ Sprint</button>
+        </div>`;
+      })
+      .join('');
+  }
+
   function calendarHtml({ cal }) {
     const c = g().calendar;
     const opt = (key, label) =>
       `<label class="check small"><input type="checkbox" data-gopt="${key}"${g()[key] ? ' checked' : ''} /> ${label}</label>`;
-    const sprints = cal.sprints.filter((x) => !x.ip).length;
-    const summary = cal.sprints.length
-      ? `${sprints} sprints × ${c.sprintWeeks} weeks${cal.pis.length ? ` · ${cal.pis.length} PI${cal.pis.length > 1 ? 's' : ''} of ${c.sprintsPerPI}${c.ipIteration ? ' + IP' : ''}` : ''}`
-      : '';
+    const n = cal.sprints.length;
+    const summary = n
+      ? `${cal.pis.length ? `${cal.pis.length} PI${cal.pis.length > 1 ? 's' : ''} · ` : ''}${n} sprint${n > 1 ? 's' : ''} · ${formatDate(cal.sprints[0].start)} – ${formatDate(cal.sprints[n - 1].end, 'long')}`
+      : 'no sprints';
     return `<div class="card gcal">
       <div class="gcal-head">
         <label class="field"><span>Plan starts</span><input type="date" data-gcal="startDate" value="${esc(c.startDate)}" /></label>
-        <button type="button" class="btn small" data-gaction="calendar">Sprints…</button>
+        <button type="button" class="btn small" data-gaction="calendar" title="Generate PIs and sprints from settings">Generate…</button>
       </div>
-      <div class="muted small">${summary}</div>
+      <details class="gplan" data-gplan${planOpen ? ' open' : ''}>
+        <summary>PIs &amp; sprints <span class="muted small">· ${summary}</span></summary>
+        <div class="gplan-list">${planHtml(cal)}
+          <button type="button" class="btn small" data-gaction="pi-add">+ PI</button>
+        </div>
+      </details>
       <div class="gcal-opts">${opt('showPIs', 'Show PIs')}${opt('showSprints', 'Show sprints')}</div>
     </div>`;
   }
 
+  /** Selector for the focused field, so focus survives a re-render. */
+  function focusKey() {
+    const el = document.activeElement;
+    if (!el || !root.contains(el)) return null;
+    const attr = ['gpfield', 'gfield', 'gcal', 'gaction'].find((k) => el.dataset[k]);
+    const field = attr ? `[data-${attr}="${el.dataset[attr]}"]` : null;
+    if (!field) return null;
+    const scope = ['pi', 'sp', 'gs', 'gt']
+      .map((k) => el.closest(`[data-${k}]`))
+      .filter(Boolean)
+      .map((c) => {
+        const k = Object.keys(c.dataset).find((x) => ['pi', 'sp', 'gs', 'gt'].includes(x));
+        return `[data-${k}="${c.dataset[k]}"]`;
+      });
+    return [...new Set(scope)].join(' ') + ' ' + field;
+  }
+
   function render() {
+    const keep = focusKey();
     const sched = scheduleGantt(g());
     const sections = g()
       .sections.map(
@@ -150,6 +207,7 @@ export function createGanttEditor(root, api) {
       <div class="add-row"><button type="button" class="btn primary" data-gaction="add-section">+ Section (team, epic…)</button></div>
       <p class="hint">Give each bar a duration – it starts after the previous one. Dates are calculated for you.</p>`;
     root.querySelectorAll('textarea').forEach(autosize);
+    if (keep && !root.contains(document.activeElement)) root.querySelector(keep)?.focus({ preventScroll: true });
   }
 
   // ------------------------------------------------------------------ helpers
@@ -160,9 +218,25 @@ export function createGanttEditor(root, api) {
   }
 
   function locate(el) {
-    const s = el.closest('[data-gs]')?.dataset.gs;
-    const t = el.closest('[data-gt]')?.dataset.gt;
-    return { s: s === undefined ? undefined : Number(s), t: t === undefined ? undefined : Number(t) };
+    const num = (attr) => {
+      const v = el.closest(`[data-${attr}]`)?.dataset[attr];
+      return v === undefined ? undefined : Number(v);
+    };
+    return { s: num('gs'), t: num('gt'), pi: num('pi'), sp: num('sp') };
+  }
+
+  /** Move a sprint up/down; at the edge of a PI it moves into the neighbouring PI. */
+  function moveSprint(pi, sp, d) {
+    const pis = g().pis;
+    const list = pis[pi].sprints;
+    const j = sp + d;
+    if (j >= 0 && j < list.length) {
+      [list[sp], list[j]] = [list[j], list[sp]];
+    } else if (pis[pi + d]) {
+      const [x] = list.splice(sp, 1);
+      if (d < 0) pis[pi - 1].sprints.push(x);
+      else pis[pi + 1].sprints.unshift(x);
+    }
   }
 
   function move(arr, i, d) {
@@ -179,8 +253,51 @@ export function createGanttEditor(root, api) {
     api.change(() => sec.tasks.push(newTask(type, from)), sel.task(s, sec.tasks.length));
   };
 
+  const sprintWeeks = () => Number(g().calendar.sprintWeeks) || 2;
+
+  /**
+   * Name for a new sprint at the end of PI `pi`: continues the numbering of that
+   * PI; in a PI without numbered sprints it starts at 1 ("restart numbering")
+   * or continues from the previous PIs.
+   */
+  function nextSprintName(pi) {
+    const c = g().calendar;
+    const numbered = (list) => list.filter((x) => /\d+\s*$/.test(x.name) && !/^IP\b/i.test(x.name)).pop();
+    const own = numbered(g().pis[pi]?.sprints ?? []);
+    if (own) return nextName(own.name.trim());
+    const first = `${c.sprintPrefix || 'Sprint'} ${Number(c.firstSprint) || 1}`;
+    if (c.restartNumbering) return first;
+    const before = numbered(g().pis.slice(0, pi).flatMap((p) => p.sprints));
+    return before ? nextName(before.name.trim()) : first;
+  }
   const actions = {
     calendar: () => api.openCalendar(),
+    'pi-add': () =>
+      api.change(() => {
+        const pis = g().pis;
+        const pi = newPlanPI(pis, '', sprintWeeks());
+        const last = pis.filter((p) => p.name.trim()).pop()?.name;
+        pi.name = last ? nextName(last) : `${g().calendar.piPrefix || 'PI'} 1`;
+        pi.sprints[0].name = nextSprintName(pis.length);
+        pis.push(pi);
+      }, `[data-pi="${g().pis.length}"] [data-gpfield="pi-name"]`),
+    'pi-up': ({ pi }) => api.change(() => move(g().pis, pi, -1)),
+    'pi-down': ({ pi }) => api.change(() => move(g().pis, pi, 1)),
+    'pi-delete': ({ pi }) => api.change(() => g().pis.splice(pi, 1)),
+    'sp-add': ({ pi }) => {
+      const list = g().pis[pi].sprints;
+      api.change(() => {
+        list.push(newPlanSprint(g().pis, nextSprintName(pi), list[list.length - 1]?.weeks ?? sprintWeeks()));
+      }, `[data-pi="${pi}"] [data-sp="${list.length}"] [data-gpfield="sp-name"]`);
+    },
+    'sp-up': ({ pi, sp }) => api.change(() => moveSprint(pi, sp, -1)),
+    'sp-down': ({ pi, sp }) => api.change(() => moveSprint(pi, sp, 1)),
+    'sp-dup': ({ pi, sp }) =>
+      api.change(() => {
+        const x = g().pis[pi].sprints[sp];
+        g().pis[pi].sprints.splice(sp + 1, 0, newPlanSprint(g().pis, x.name, x.weeks));
+      }),
+    'sp-delete': ({ pi, sp }) => api.change(() => g().pis[pi].sprints.splice(sp, 1)),
     'add-section': () => {
       const n = g().sections.length;
       api.change(() => g().sections.push(newGanttSection()), sel.section(n));
@@ -204,6 +321,14 @@ export function createGanttEditor(root, api) {
 
   // ------------------------------------------------------------------ events
 
+  root.addEventListener(
+    'toggle',
+    (ev) => {
+      if (ev.target.matches?.('[data-gplan]')) planOpen = ev.target.open;
+    },
+    true,
+  );
+
   root.addEventListener('click', (ev) => {
     const btn = ev.target.closest('[data-gaction]');
     if (btn) actions[btn.dataset.gaction]?.(locate(btn));
@@ -211,6 +336,15 @@ export function createGanttEditor(root, api) {
 
   root.addEventListener('input', (ev) => {
     const el = ev.target;
+    // PI / sprint names: update the chart while typing (dates do not change)
+    if (el.dataset.gpfield === 'pi-name' || el.dataset.gpfield === 'sp-name') {
+      api.snapshotTyping();
+      const { pi, sp } = locate(el);
+      if (el.dataset.gpfield === 'pi-name') g().pis[pi].name = el.value;
+      else g().pis[pi].sprints[sp].name = el.value;
+      api.update();
+      return;
+    }
     const field = el.dataset.gfield;
     if (el.tagName !== 'TEXTAREA' || !field) return;
     autosize(el);
@@ -222,6 +356,13 @@ export function createGanttEditor(root, api) {
   });
 
   root.addEventListener('change', (ev) => {
+    // Text/number/date inputs report "change" when focus leaves them (e.g. Tab):
+    // re-render after the focus has moved, so it can be restored on the new field.
+    if (ev.target.tagName === 'INPUT' && ev.target.type !== 'checkbox') setTimeout(() => onChange(ev), 0);
+    else onChange(ev);
+  });
+
+  function onChange(ev) {
     const el = ev.target;
     if (el.dataset.gopt) {
       api.snapshot();
@@ -233,6 +374,12 @@ export function createGanttEditor(root, api) {
       if (el.value) api.change(() => (g().calendar[el.dataset.gcal] = el.value));
       return;
     }
+    if (el.dataset.gpfield === 'sp-weeks') {
+      const { pi, sp } = locate(el);
+      api.change(() => (g().pis[pi].sprints[sp].weeks = Math.max(1, Math.min(12, Math.round(Number(el.value) || 1)))));
+      return;
+    }
+    if (el.dataset.gpfield) return; // names are applied while typing
     const field = el.dataset.gfield;
     if (!field || el.tagName === 'TEXTAREA') return;
     const { s, t } = locate(el);
@@ -276,11 +423,16 @@ export function createGanttEditor(root, api) {
           break;
       }
     });
-  });
+  }
 
   /** Enter in a task name adds the next task (starting after it). */
   root.addEventListener('keydown', (ev) => {
     const el = ev.target;
+    if (ev.key === 'Enter' && el.dataset.gpfield === 'sp-name') {
+      ev.preventDefault();
+      actions['sp-add'](locate(el));
+      return;
+    }
     if (ev.key !== 'Enter' || ev.isComposing || el.tagName !== 'TEXTAREA') return;
     ev.preventDefault();
     const { s, t } = locate(el);
