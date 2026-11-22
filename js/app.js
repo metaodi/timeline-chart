@@ -8,6 +8,7 @@ import { styleGantt } from './gantt-style.js';
 import { peleCss } from './pele-css.js';
 import { alignTitle } from './svg-title.js';
 import { addNotes } from './gantt-notes.js';
+import { collapseCalendarRows } from './gantt-collapse.js';
 import { emptyGantt, newGanttSection } from './gantt.js';
 import { toMermaid, normalize, isEmpty, newPeriod, newSection, THEMES, KINDS, getKind, stripKind, setKind } from './model.js';
 import { parseMermaid } from './parser.js';
@@ -391,6 +392,7 @@ function previewOptions() {
     // Runs after every (re-)layout, including resizes.
     onRender: () => {
       const svg = $('#preview svg.pele');
+      collapseCalendarRows(svg, state);
       insideLabels = styleGantt(svg, state);
       alignTitle(svg, state.titleAlign);
       if (state.mode === 'gantt') {
@@ -456,6 +458,7 @@ function exportSvg() {
     const el = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
     const vars = themeVars(state.theme, state.disableMulticolor);
     applyVars(el, vars);
+    collapseCalendarRows(el, state);
     styleGantt(el, state);
     alignTitle(el, state.titleAlign);
     if (state.mode === 'gantt') addNotes(el, state);

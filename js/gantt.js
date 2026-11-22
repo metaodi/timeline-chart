@@ -69,6 +69,7 @@ export function emptyGantt() {
     showSprints: true,
     rows: [...ROW_PRESETS.standard.rows], // zebra stripes of the chart rows
     showNotes: true, // numbered notes below the chart
+    layout: 'compact', // 'compact' (packed by date) | 'ordered' (one row per entry, editor order)
     excludeWeekends: false, // kept for imported charts; no UI (clean look)
     todayMarker: false,
     sections: [],
@@ -138,6 +139,7 @@ export function normalizeGantt(g) {
   d.calendar = { ...DEFAULT_CALENDAR, ...(d.calendar || {}) };
   for (const k of ['showPIs', 'showSprints', 'excludeWeekends', 'todayMarker']) d[k] = Boolean(d[k]);
   d.showNotes = d.showNotes !== false;
+  d.layout = d.layout === 'ordered' ? 'ordered' : 'compact';
   d.rows = [0, 1].map((i) => (isRowToken(d.rows?.[i]) ? d.rows[i].toLowerCase() : ROW_PRESETS.standard.rows[i]));
   d.pis = Array.isArray(d.pis) ? normalizePlan(d.pis) : sprintPlanFromConfig(d.calendar);
   // every sprint needs a unique id (tasks reference them)
@@ -353,9 +355,10 @@ export function toGanttMermaid(t, frontmatter = []) {
   const g = normalizeGanttShallow(t.gantt);
   const { cal, dates } = scheduleGantt(g);
   const fm = [...frontmatter];
-  const at = fm.indexOf('    displayMode: compact');
+  const at = fm.indexOf('  gantt:');
+  const compact = g.layout !== 'ordered';
   const scale = ganttScale(cal, dates);
-  if (at >= 0) fm.splice(at + 1, 0, `    useWidth: ${scale.width}`);
+  if (at >= 0) fm.splice(at + (compact ? 2 : 1), 0, `    useWidth: ${scale.width}`);
   const out = [...fm, 'gantt'];
   if (t.title?.trim()) out.push(`  title ${t.title.replace(/\s*\n\s*/g, ' ').trim()}`);
   if (t.accTitle?.trim()) out.push(`  accTitle: ${t.accTitle.trim()}`);
@@ -392,7 +395,8 @@ export function toGanttMermaid(t, frontmatter = []) {
       .map((task, ti) => {
         const when = dates[si][ti];
         let span = 0;
-        if (task.type === 'milestone' && when) {
+        // (only needed in the compact layout; in the ordered one every entry has its own row)
+        if (task.type === 'milestone' && when && compact) {
           // keep the range inside the chart, or Pele would stretch the time axis
           const d = when.start.getTime();
           const room = Math.min((d - scale.start) / 864e5, (scale.end - d) / 864e5 + 1);

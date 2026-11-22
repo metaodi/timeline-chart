@@ -211,6 +211,13 @@ export function createGanttEditor(root, api) {
         </div>
       </details>
       <div class="gcal-opts">${opt('showPIs', 'Show PIs')}${opt('showSprints', 'Show sprints')}${opt('showNotes', 'Notes below chart')}</div>
+      <div class="grows">
+        <span class="muted small">Order</span>
+        <select data-glayout aria-label="Order of the entries">
+          ${option('compact', 'Compact – packed by start date', g().layout !== 'ordered')}
+          ${option('ordered', 'In my order – one row per entry', g().layout === 'ordered')}
+        </select>
+      </div>
       ${rowsHtml()}
     </div>`;
   }
@@ -454,6 +461,10 @@ export function createGanttEditor(root, api) {
 
   function onChange(ev) {
     const el = ev.target;
+    if (el.hasAttribute('data-glayout')) {
+      api.change(() => (g().layout = el.value === 'ordered' ? 'ordered' : 'compact'));
+      return;
+    }
     if (el.dataset.grows) {
       const which = el.dataset.grows;
       if (which === 'preset') {

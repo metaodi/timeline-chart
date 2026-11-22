@@ -164,7 +164,9 @@ function frontmatter(t) {
   if (t.theme !== 'default') out.push(`  theme: ${t.theme}`);
   if (t.disableMulticolor && t.mode === 'timeline') out.push('  timeline:', '    disableMulticolor: true');
   // Compact: bars that don't overlap share a row, so sprints sit side by side instead of a "staircase".
-  if (t.mode === 'gantt') out.push('  gantt:', '    displayMode: compact');
+  // "compact": entries that don't overlap share a row (packed by start date);
+  // "ordered": one row per entry in the editor's order (PI/sprint rows collapsed afterwards)
+  if (t.mode === 'gantt') out.push('  gantt:', ...(t.gantt?.layout === 'ordered' ? [] : ['    displayMode: compact']));
   return out.length ? ['---', 'config:', ...out, '---'] : [];
 }
 

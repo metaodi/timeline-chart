@@ -40,8 +40,13 @@ data.
   editable in the *PIs & sprints* list: rename, change a sprint's length in weeks, add, delete, reorder (a sprint moved
   past the edge of a PI moves into the neighbouring PI). A PI without a name holds sprints that belong to no PI.
   Sprint dates follow from the plan start and the sprint lengths.
-- The chart shows a **PI row** and a **Sprint row** with all sprints side by side (`displayMode: compact`, no
-  "staircase").
+- The chart shows a **PI row** and a **Sprint row** with all sprints side by side (no "staircase").
+- **Order** of the entries:
+  - *Compact* (`displayMode: compact`): entries that don't overlap share a row – few rows, but within a section the
+    rows are sorted by start date.
+  - *In my order*: one row per entry, exactly in the editor's order (keep related tasks together). Mermaid's normal
+    layout is used and the app collapses the PI and sprint rows into one row each afterwards (`js/gantt-collapse.js`);
+    the Pele playground cannot do that, so there sprints get one row each.
 - **Sections** (teams, epics, workstreams) contain **bars**, **milestones** ◆ and **deadlines** (vertical line).
   Milestones close to each other get their own rows: in the code a milestone is written as a range as wide as its
   label, centred on its date (Pele draws the diamond in the middle), so the compact layout sees them overlap.
@@ -133,6 +138,7 @@ js/pele-css.js      CSS for the Pele playground (theme + Gantt colours)
 js/drag.js          drag & drop between lists (pointer events: mouse and touch)
 js/svg-title.js     left-aligned diagram title
 js/gantt-notes.js   tooltips, numbered notes below the chart, link markers
+js/gantt-collapse.js "In my order" layout: PI and sprint rows collapsed into one row each
 js/storage.js       localStorage autosave, share-link encoding
 js/app.js           UI wiring
 test/               node:test unit tests
