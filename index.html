@@ -91,9 +91,12 @@
       </section>
 
       <!-- Code -->
-      <section class="pane code-pane" id="pane-code" aria-label="Mermaid code">
+      <section class="pane code-pane" id="pane-code" aria-label="Code">
         <div class="pane-head">
-          <h2>Mermaid code</h2>
+          <div class="code-tabs" role="tablist" aria-label="Code">
+            <button type="button" role="tab" data-code="mermaid" aria-selected="true">Mermaid code</button>
+            <button type="button" role="tab" data-code="css" aria-selected="false" title="Paste into the CSS tab of the Pele playground">Pele CSS</button>
+          </div>
           <div class="pane-actions">
             <button type="button" class="btn small primary" id="copy-code">Copy code</button>
           </div>

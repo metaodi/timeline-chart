@@ -8,7 +8,7 @@
  * gantt.js: "pi1", "s3" (sprints) and "g0t2" (section 0, task 2).
  */
 import { calendarOf, sectionColour } from './gantt.js';
-import { themeVars } from './themes.js';
+import { themeVars, rowColour } from './themes.js';
 
 const CHAR_WIDTH = 0.56; // average glyph width relative to the font size
 
@@ -45,7 +45,8 @@ const num = (el, attr) => Number(el.getAttribute(attr)) || 0;
  * @param {object} state app state (gantt + theme)
  */
 export function styleGantt(svg, state) {
-  if (!svg?.classList.contains('pele-gantt')) return;
+  if (!svg?.classList.contains('pele-gantt')) return new Set();
+  const insideLabels = new Set(); // ids of tasks whose label sits on the bar (for pele-css.js)
   const cal = calendarOf(state.gantt);
   const vars = themeVars(state.theme);
   const tasks = [...svg.querySelectorAll('g.pele-task[data-id]')];
@@ -60,6 +61,10 @@ export function styleGantt(svg, state) {
     rows.get(y).push(num(rect, 'x'));
   }
   const right = num(svg, 'width') || svg.viewBox?.baseVal?.width || Infinity;
+
+  // Zebra stripes of the rows (configurable in the editor)
+  const rowsCfg = state.gantt.rows ?? ['surface', 'none'];
+  svg.querySelectorAll('rect.pele-section').forEach((band, i) => band.setAttribute('fill', rowColour(rowsCfg[i % 2], vars)));
 
   for (const g of tasks) {
     const k = seriesFor(g.dataset.id, state.gantt, cal);
@@ -94,6 +99,7 @@ export function styleGantt(svg, state) {
     const lx = num(label, 'x');
     const inside = lx >= x && lx <= x + w;
     if (inside) {
+      insideLabels.add(g.dataset.id);
       if (neutral) label.setAttribute('fill', 'var(--_bg)');
       if (k && !crit) {
         const light = luminance(vars[`--pele-series-${k}`]) > 0.45;
@@ -116,4 +122,5 @@ export function styleGantt(svg, state) {
       g.prepend(title);
     }
   }
+  return insideLabels;
 }

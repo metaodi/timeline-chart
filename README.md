@@ -5,6 +5,9 @@ software delivery – sprints, Program Increments (PIs), release trains and mile
 Diagrams are rendered with [Pele](https://pele.run), a fast, lightweight Mermaid renderer.
 
 - **Form-based editor**: sections (PI, quarter…) → periods (sprint, month…) → items (stories, releases…)
+- **Drag & drop** with the ⠿ handle (mouse and touch): move Gantt tasks and timeline periods to another section,
+  timeline items to another period. Without a mouse, ↑/↓ at the edge of a section moves an entry into the
+  neighbouring section; <kbd>Esc</kbd> cancels a drag.
 - **Live preview** rendered by Pele, horizontal (`LR`) or vertical (`TD`), with colour presets
 - **Responsive diagrams**: the preview re-lays out to the available width; on narrow screens a wide horizontal
   timeline switches to vertical automatically (toggle "Responsive"). Pinch/scroll zoom is built in.
@@ -12,6 +15,10 @@ Diagrams are rendered with [Pele](https://pele.run), a fast, lightweight Mermaid
 - **Sprint / PI generator**: start date, sprint length, sprints per PI, optional IP iteration, date labels
 - **Milestones & deadlines**: every item/period has a type (🏁 milestone, ⏰ deadline, 🚀 release, ⚠️ risk, ✅ done)
 - **Export**: download PNG or SVG (optionally transparent), copy the Mermaid code
+- **Pele playground**: the *Pele CSS* tab next to the Mermaid code gives CSS for the playground's CSS tab
+  ([pele.run](https://pele.run)) – a complete `.pele { --pele-… }` theme and, for Gantt charts, the colours of PIs,
+  sprints, sections, statuses and row stripes (by the task ids in the Mermaid code). Paste the Mermaid code and the
+  CSS there and the diagram looks like in this app; only the "…" shortening of long labels is not possible in CSS.
 - **Import** existing Mermaid timeline code, **share links** (the whole timeline is stored in the URL), autosave in the browser, undo/redo
 - Works on desktop and mobile (on phones the app switches to Edit / Preview / Code tabs)
 
@@ -37,6 +44,8 @@ data.
 - **Sections** (teams, epics, workstreams) contain **bars**, **milestones** ◆ and **deadlines** (vertical line).
 - **Status**: planned, in progress (outlined), done (faded), critical (red).
 - Change a duration or the plan start and everything that follows moves with it.
+- **Row stripes**: the alternating row colours are configurable next to the plan start – *Standard* (grey / none),
+  *Subtle grey* (grey / a lighter grey mixed from the theme), *No stripes*, or two custom colours.
 - **Width**: the chart width grows with the plan (about 40px per week, 1000–4000px, Mermaid `useWidth`). On desktop
   the preview shows it at full width and scrolls horizontally; **⤢ Wide** hides the editor so the chart can use the
   whole window. On phones it scales down (zoom for details).
@@ -112,6 +121,8 @@ js/examples.js      built-in examples (add your own)
 js/themes.js        Pele colour presets (CSS variables)
 js/export.js        SVG / PNG download, clipboard
 js/svg-vars.js      resolves CSS variables to concrete colours for SVG export
+js/pele-css.js      CSS for the Pele playground (theme + Gantt colours)
+js/drag.js          drag & drop between lists (pointer events: mouse and touch)
 js/storage.js       localStorage autosave, share-link encoding
 js/app.js           UI wiring
 test/               node:test unit tests

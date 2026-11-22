@@ -78,6 +78,51 @@ export function themeVars(theme, singleColour = false) {
   return vars;
 }
 
+/**
+ * Pele's built-in values for the variables a preset does not set (as used in
+ * its SVG output), in the order the Pele playground lists them.
+ */
+export const PELE_DEFAULTS = {
+  '--pele-bg': '#ffffff',
+  '--pele-fg': '#1f1f1f',
+  '--pele-fg-on-light': '#1f1f1f',
+  '--pele-fg-on-dark': '#ffffff',
+  '--pele-muted': '#6e6e6e',
+  '--pele-line': '#1f1f1f',
+  '--pele-surface': '#f3f3f3',
+  '--pele-surface-alt': '#e6e6e6',
+  '--pele-border': '#8a8a8a',
+  '--pele-accent': '#5b7bd5',
+  '--pele-critical': '#e45756',
+  '--pele-error': '#e45756',
+  '--pele-font': "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  '--pele-title-weight': 'bold',
+  '--pele-heading-weight': 'bold',
+  '--pele-radius': '4px',
+};
+
+export const themeColour = (vars, name) => vars[name] ?? PELE_DEFAULTS[name];
+
+/** Mix two #rrggbb colours (t = share of b). */
+export function mixHex(a, b, t = 0.5) {
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [rgb(a), rgb(b)];
+  return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Colour of a Gantt row stripe: "none" (background shows through), "surface"
+ * (the theme's light grey), "mix" (halfway between background and surface: a
+ * very subtle grey) or a #rrggbb colour.
+ */
+export function rowColour(token, vars) {
+  if (token === 'none') return 'none';
+  const surface = themeColour(vars, '--pele-surface');
+  if (token === 'surface') return surface;
+  if (token === 'mix') return mixHex(themeColour(vars, '--pele-bg'), surface, 0.5);
+  return /^#[0-9a-f]{6}$/i.test(token) ? token : surface;
+}
+
 export function applyVars(el, vars) {
   for (const [k, v] of Object.entries(vars)) el.style.setProperty(k, v);
 }

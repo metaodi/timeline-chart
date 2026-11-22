@@ -3,9 +3,13 @@
  * epics…) and tasks defined by a start rule and a duration. Concrete dates are
  * computed by scheduleGantt() and shown under each task.
  */
-import { TASK_TYPES, STATUSES, DURATION_UNITS, SECTION_COLOURS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
-import { themeVars } from './themes.js';
+import { TASK_TYPES, STATUSES, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
+import { themeVars, rowColour, themeColour } from './themes.js';
+import { sortable, moveBetween } from './drag.js';
 import { formatDate, isoDate, nextName } from './generator.js';
+
+/** The scrolling editor column on desktop; on phones the page itself scrolls. */
+export const editorScroller = () => (matchMedia('(max-width: 720px)').matches ? null : document.querySelector('.editor-pane'));
 
 const esc = (s) =>
   String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -101,6 +105,7 @@ export function createGanttEditor(root, api) {
     const placeholder = task.type === 'task' ? 'Feature, epic, story…' : task.type === 'milestone' ? 'Release, demo…' : 'Code freeze, deadline…';
     return `<li class="gtask type-${task.type} status-${task.status || 'planned'}" data-gt="${t}">
       <div class="gtask-head">
+        <span class="drag-handle drag-task" title="Drag to move – also to another section" aria-hidden="true">⠿</span>
         ${typePicker}
         <textarea rows="1" data-gfield="name" data-gs="${s}" data-gt="${t}" placeholder="${placeholder}">${esc(task.name)}</textarea>
         <span class="tools">${iconBtn('task-up', 'Move up', '↑')}${iconBtn('task-down', 'Move down', '↓')}${iconBtn('task-dup', 'Duplicate', '⧉')}${iconBtn('task-delete', 'Delete', '✕', 'del')}</span>
@@ -164,6 +169,24 @@ export function createGanttEditor(root, api) {
       .join('');
   }
 
+  /** Row stripes: preset + two colour pickers. */
+  function rowsHtml() {
+    const vars = themeVars(api.getState().theme);
+    const rows = g().rows;
+    const preset = Object.entries(ROW_PRESETS).find(([, p]) => p.rows.join() === rows.join())?.[0] ?? 'custom';
+    const picker = (i) => {
+      const c = rowColour(rows[i], vars);
+      const value = c === 'none' ? themeColour(vars, '--pele-bg') : c;
+      return `<input type="color" data-grows="${i}" value="${value}" title="Row colour ${i + 1}" aria-label="Row colour ${i + 1}" />`;
+    };
+    return `<div class="grows">
+      <span class="muted small">Rows</span>
+      <select data-grows="preset" aria-label="Row stripes">
+        ${Object.entries(ROW_PRESETS).map(([id, p]) => option(id, p.label, id === preset)).join('')}
+        ${option('custom', 'Custom', preset === 'custom')}
+      </select>${picker(0)}${picker(1)}</div>`;
+  }
+
   function calendarHtml({ cal }) {
     const c = g().calendar;
     const opt = (key, label) =>
@@ -184,6 +207,7 @@ export function createGanttEditor(root, api) {
         </div>
       </details>
       <div class="gcal-opts">${opt('showPIs', 'Show PIs')}${opt('showSprints', 'Show sprints')}</div>
+      ${rowsHtml()}
     </div>`;
   }
 
@@ -340,8 +364,19 @@ export function createGanttEditor(root, api) {
     'add-task': addTask('task'),
     'add-milestone': addTask('milestone'),
     'add-deadline': addTask('deadline'),
-    'task-up': ({ s, t }) => api.change(() => move(g().sections[s].tasks, t, -1)),
-    'task-down': ({ s, t }) => api.change(() => move(g().sections[s].tasks, t, 1)),
+    // at the edge of a section, ↑/↓ move the task into the neighbouring section
+    'task-up': ({ s, t }) =>
+      api.change(() => {
+        const secs = g().sections;
+        if (t > 0) move(secs[s].tasks, t, -1);
+        else if (secs[s - 1]) moveBetween(secs[s].tasks, 0, secs[s - 1].tasks, secs[s - 1].tasks.length);
+      }),
+    'task-down': ({ s, t }) =>
+      api.change(() => {
+        const secs = g().sections;
+        if (t < secs[s].tasks.length - 1) move(secs[s].tasks, t, 1);
+        else if (secs[s + 1]) moveBetween(secs[s].tasks, t, secs[s + 1].tasks, 0);
+      }),
     'task-dup': ({ s, t }) => api.change(() => g().sections[s].tasks.splice(t + 1, 0, copy(g().sections[s].tasks[t])), sel.task(s, t + 1)),
     'task-delete': ({ s, t }) => api.change(() => g().sections[s].tasks.splice(t, 1)),
   };
@@ -398,6 +433,15 @@ export function createGanttEditor(root, api) {
 
   function onChange(ev) {
     const el = ev.target;
+    if (el.dataset.grows) {
+      const which = el.dataset.grows;
+      if (which === 'preset') {
+        if (ROW_PRESETS[el.value]) api.change(() => (g().rows = [...ROW_PRESETS[el.value].rows]));
+      } else {
+        api.change(() => (g().rows[Number(which)] = el.value.toLowerCase()));
+      }
+      return;
+    }
     if (el.dataset.gopt) {
       api.snapshot();
       g()[el.dataset.gopt] = el.checked;
@@ -477,6 +521,19 @@ export function createGanttEditor(root, api) {
     } else {
       api.change(() => sec.tasks.splice(t + 1, 0, newTask(sec.tasks[t].type, 'prev')), sel.task(s, t + 1));
     }
+  });
+
+  // Drag tasks by their handle, also into another section
+  sortable(root, {
+    handle: '.drag-task',
+    item: '.gtask',
+    containerAt: (el) => el.closest('.group.section')?.querySelector('.gtasks') ?? null,
+    scroller: editorScroller,
+    onDrop: (item, container, index) => {
+      const { s, t } = locate(item);
+      const to = Number(container.closest('[data-gs]').dataset.gs);
+      api.change(() => moveBetween(g().sections[s].tasks, t, g().sections[to].tasks, index));
+    },
   });
 
   return { render, autosizeAll: () => root.querySelectorAll('textarea').forEach(autosize) };
