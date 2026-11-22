@@ -1,5 +1,6 @@
 /** Download / clipboard helpers. */
 import { inlineCssVars } from './svg-vars.js';
+import { embedInSvg, embedInPng } from './embed.js';
 
 function slug(name) {
   return (
@@ -52,8 +53,10 @@ export function svgMarkup(svgEl, background) {
   return new XMLSerializer().serializeToString(clone);
 }
 
-export function downloadSvg(svgEl, title, background) {
-  const blob = new Blob([svgMarkup(svgEl, background)], { type: 'image/svg+xml;charset=utf-8' });
+/** SVG download; with `state` the app state is embedded (<metadata>) for a 1:1 restore. */
+export function downloadSvg(svgEl, title, background, state) {
+  const markup = svgMarkup(svgEl, background);
+  const blob = new Blob([state ? embedInSvg(markup, state) : markup], { type: 'image/svg+xml;charset=utf-8' });
   download(blob, `${slug(title)}.svg`);
 }
 
@@ -80,8 +83,11 @@ export async function pngBlob(svgEl, background, scale = 2) {
   );
 }
 
-export async function downloadPng(svgEl, title, background) {
-  download(await pngBlob(svgEl, background), `${slug(title)}.png`);
+/** PNG download; with `state` the app state is embedded (iTXt chunk) for a 1:1 restore. */
+export async function downloadPng(svgEl, title, background, state) {
+  let blob = await pngBlob(svgEl, background);
+  if (state) blob = new Blob([embedInPng(new Uint8Array(await blob.arrayBuffer()), state)], { type: 'image/png' });
+  download(blob, `${slug(title)}.png`);
 }
 
 export async function copyText(text) {

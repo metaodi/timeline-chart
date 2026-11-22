@@ -365,6 +365,7 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
 .dialog p { margin: 0; }
 .dialog textarea { font: 13px/1.5 ui-monospace, Menlo, monospace; resize: vertical; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.file-row { display: flex; gap: 8px; align-items: center; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 .toast {
