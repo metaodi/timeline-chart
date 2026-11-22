@@ -43,6 +43,8 @@ data.
 - The chart shows a **PI row** and a **Sprint row** with all sprints side by side (`displayMode: compact`, no
   "staircase").
 - **Sections** (teams, epics, workstreams) contain **bars**, **milestones** ◆ and **deadlines** (vertical line).
+  Milestones close to each other get their own rows: in the code a milestone is written as a range as wide as its
+  label, centred on its date (Pele draws the diamond in the middle), so the compact layout sees them overlap.
 - **Status**: planned, in progress (outlined), done (faded), critical (red).
 - Change a duration or the plan start and everything that follows moves with it.
 - **Row stripes**: the alternating row colours are configurable next to the plan start – *Standard* (grey / none),
