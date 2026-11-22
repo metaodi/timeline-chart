@@ -51,6 +51,8 @@ export function parseMermaid(code) {
   const header = src.split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('%%'));
   if (/^gantt\b/i.test(header ?? '')) {
     const r = parseGanttMermaid(src);
+    // without "displayMode: compact" Mermaid draws one row per entry in source order
+    r.gantt.layout = fm && /displayMode:\s*compact/.test(fm[1]) ? 'compact' : 'ordered';
     Object.assign(t, { mode: 'gantt', gantt: r.gantt, title: r.title, accTitle: r.accTitle, accDescr: r.accDescr });
     return { timeline: t, warnings: r.warnings };
   }

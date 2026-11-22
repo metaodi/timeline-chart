@@ -47,6 +47,12 @@ export function peleCss(state, insideLabels = new Set()) {
 
   const g = state.gantt;
   const cal = calendarOf(g);
+  if (g.layout === 'ordered') {
+    out.push(
+      '/* Layout "In my order": this app collapses the PI and sprint rows into one row each.\n' +
+        '   CSS cannot move rows, so in the playground every PI and sprint keeps its own row. */',
+    );
+  }
   const shape = (sel) => `${sel} > :is(rect, path)`;
   const inside = (sel) => `${sel} > .pele-label[fill]`; // labels drawn on the bar
 
