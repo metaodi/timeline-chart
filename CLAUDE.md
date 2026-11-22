@@ -53,7 +53,9 @@ post-processing on the SVG, in this order:
 4. `addNotes` – appends footnotes, grows the viewBox (preview then calls `mounted.zoom.refresh()`)
 
 Export additionally: `applyVars` (theme variables on the root) and, in `svgMarkup`, `inlineCssVars` + a background
-`<rect>`. Exports render at natural width; the preview may use a wider `useWidth` (`previewCode()`).
+`<rect>`. On desktop the preview widens Gantt charts to at least the preview width (`previewCode()` raises
+`useWidth`), and exports use the same `previewCode()` – the export is as wide as what the user sees (wide view
+included). On phones both use the code's own width.
 
 ### Gantt data model (`state.gantt`)
 
