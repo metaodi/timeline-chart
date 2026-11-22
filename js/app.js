@@ -1,9 +1,12 @@
-import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.3.0/dist/mermaid.esm.min.mjs';
+// Pele renders Mermaid syntax to SVG (https://pele.run). Only the timeline diagram is loaded.
+import { register, render, mount } from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/core.js';
+import timeline from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/diagrams/timeline.js';
 import { toMermaid, normalize, isEmpty, newPeriod, newSection, THEMES, KINDS, getKind, stripKind, setKind } from './model.js';
 import { parseMermaid } from './parser.js';
 import { generateSprints } from './generator.js';
 import { EXAMPLES, DEFAULT_EXAMPLE } from './examples.js';
 import { downloadSvg, downloadPng, copyText } from './export.js';
+import { PRESETS, themeVars, applyVars } from './themes.js';
 import { loadLocal, saveLocal, encodeShare, decodeShare } from './storage.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -262,7 +265,7 @@ function renderSettings() {
 }
 
 function bindSettings() {
-  $('#theme').innerHTML = THEMES.map((t) => `<option value="${t}">${t[0].toUpperCase() + t.slice(1)}</option>`).join('');
+  $('#theme').innerHTML = THEMES.map((t) => `<option value="${t}">${PRESETS[t]?.label ?? t}</option>`).join('');
   const onText = (key) => (ev) => {
     snapshotTyping();
     state[key] = ev.target.value;
@@ -294,55 +297,74 @@ function bindSettings() {
 // Preview
 // ---------------------------------------------------------------------------
 
-mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', suppressErrorRendering: true });
+register(timeline);
 
-let renderSeq = 0;
 let renderTimer = null;
 let currentCode = '';
+let mounted = null; // Pele mount: re-lays out the diagram whenever the preview resizes
 
 function update() {
   currentCode = toMermaid(state);
   $('#code').textContent = currentCode;
   saveLocal(state);
   clearTimeout(renderTimer);
-  renderTimer = setTimeout(renderPreview, 150);
+  renderTimer = setTimeout(renderPreview, 120);
   updateHistoryButtons();
 }
 
-async function renderPreview() {
-  const seq = ++renderSeq;
+function previewOptions() {
+  return {
+    // On narrow screens Pele switches a too-wide horizontal timeline to vertical.
+    autoDirection: $('#responsive').checked,
+    zoom: 'auto',
+    onError: showError,
+  };
+}
+
+function showError(err) {
+  const where = err?.line ? `Line ${err.line}: ` : '';
+  $('#error').textContent = `Could not render this timeline. ${where}${err?.message || err}`;
+  $('#error').hidden = false;
+}
+
+function renderPreview() {
   const preview = $('#preview');
-  const error = $('#error');
+  $('#error').hidden = true;
+  applyVars(preview, themeVars(state.theme, state.disableMulticolor));
   if (isEmpty(state)) {
+    mounted?.destroy();
+    mounted = null;
     preview.innerHTML = '<p class="muted placeholder">Add a period to see the timeline.</p>';
-    error.hidden = true;
     return;
   }
-  try {
-    const { svg } = await mermaid.render(`tl-${seq}`, currentCode);
-    if (seq !== renderSeq) return;
-    preview.innerHTML = svg;
-    preview.dataset.theme = state.theme;
-    error.hidden = true;
-  } catch (err) {
-    if (seq !== renderSeq) return;
-    error.textContent = `Mermaid could not render this timeline: ${err?.message || err}`;
-    error.hidden = false;
-  } finally {
-    // mermaid leaves a temporary container behind on errors
-    document.getElementById(`dtl-${seq}`)?.remove();
+  if (!mounted) {
+    preview.innerHTML = '';
+    mounted = mount(preview, currentCode, previewOptions());
+  } else {
+    mounted.update(currentCode, previewOptions());
   }
 }
 
-function exportBackground() {
-  if ($('#transparent').checked) return null;
-  return state.theme === 'dark' ? '#333333' : '#ffffff';
-}
-
-function currentSvg() {
-  const svg = $('#preview svg');
-  if (!svg) toast('Nothing to export yet');
-  return svg;
+/**
+ * Exports are rendered separately at natural size (not squeezed to the
+ * preview width) with the theme's colours written into the SVG.
+ */
+function exportSvg() {
+  if (isEmpty(state)) {
+    toast('Nothing to export yet');
+    return null;
+  }
+  try {
+    const { svg } = render(currentCode, { padding: 16 });
+    const el = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
+    const vars = themeVars(state.theme, state.disableMulticolor);
+    applyVars(el, vars);
+    const background = $('#transparent').checked ? null : vars['--pele-bg'];
+    return { el, background };
+  } catch (err) {
+    showError(err);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -494,23 +516,19 @@ function bindToolbar() {
     }
   });
   $('#dl-svg').addEventListener('click', () => {
-    const svg = currentSvg();
-    if (svg) downloadSvg(svg, state.title, exportBackground());
+    const out = exportSvg();
+    if (out) downloadSvg(out.el, state.title, out.background);
   });
   $('#dl-png').addEventListener('click', async () => {
-    const svg = currentSvg();
-    if (!svg) return;
+    const out = exportSvg();
+    if (!out) return;
     try {
-      await downloadPng(svg, state.title, exportBackground());
+      await downloadPng(out.el, state.title, out.background);
     } catch (err) {
       toast(err.message);
     }
   });
-  $('#fit').addEventListener('click', (ev) => {
-    const fit = $('#preview').classList.toggle('fit');
-    ev.currentTarget.setAttribute('aria-pressed', String(fit));
-    ev.currentTarget.textContent = fit ? 'Fit' : '100%';
-  });
+  $('#responsive').addEventListener('change', renderPreview);
 
   $$('.tabbar button').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
 }

@@ -72,13 +72,13 @@
         <div class="pane-head">
           <h2>Preview</h2>
           <div class="pane-actions">
-            <button type="button" class="btn small" id="fit" aria-pressed="true" title="Fit to width / actual size">Fit</button>
+            <label class="check small" title="On narrow screens, switch a wide horizontal timeline to vertical"><input type="checkbox" id="responsive" checked /> Responsive</label>
             <label class="check small"><input type="checkbox" id="transparent" /> Transparent</label>
             <button type="button" class="btn small" id="dl-svg">SVG</button>
             <button type="button" class="btn small primary" id="dl-png">PNG</button>
           </div>
         </div>
-        <div class="preview fit" id="preview" aria-live="polite"></div>
+        <div class="preview" id="preview" aria-live="polite"></div>
         <p class="error" id="error" hidden></p>
       </section>
 

@@ -37,6 +37,7 @@ export function svgMarkup(svgEl, background) {
   clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
   clone.style.maxWidth = '';
+  clone.style.height = '';
   if (background) clone.style.backgroundColor = background;
   return new XMLSerializer().serializeToString(clone);
 }

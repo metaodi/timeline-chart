@@ -2,16 +2,20 @@
 
 A small, client-only web app to build [Mermaid timeline](https://mermaid.js.org/syntax/timeline.html) diagrams for
 software delivery – sprints, Program Increments (PIs), release trains and milestones – without writing Mermaid by hand.
+Diagrams are rendered with [Pele](https://pele.run), a fast, lightweight Mermaid renderer.
 
 - **Form-based editor**: sections (PI, quarter…) → periods (sprint, month…) → items (stories, releases…)
-- **Live preview** rendered by Mermaid, horizontal (`LR`) or vertical (`TD`), with Mermaid themes
+- **Live preview** rendered by Pele, horizontal (`LR`) or vertical (`TD`), with colour presets
+- **Responsive diagrams**: the preview re-lays out to the available width; on narrow screens a wide horizontal
+  timeline switches to vertical automatically (toggle "Responsive"). Pinch/scroll zoom is built in.
 - **Sprint / PI generator**: start date, sprint length, sprints per PI, optional IP iteration, date labels
 - **Milestones & deadlines**: every item/period has a type (🏁 milestone, ⏰ deadline, 🚀 release, ⚠️ risk, ✅ done)
 - **Export**: download PNG or SVG (optionally transparent), copy the Mermaid code
 - **Import** existing Mermaid timeline code, **share links** (the whole timeline is stored in the URL), autosave in the browser, undo/redo
 - Works on desktop and mobile (on phones the app switches to Edit / Preview / Code tabs)
 
-No build step and no dependencies: plain HTML, CSS and ES modules. Mermaid is loaded from jsDelivr.
+No build step and no dependencies: plain HTML, CSS and ES modules. Pele (core + the timeline diagram only) is loaded
+from jsDelivr. Exports are rendered separately at natural size, so a PNG saved on a phone is not squeezed.
 
 ## Run locally
 
@@ -52,11 +56,12 @@ timeline TD                # or "timeline" / "timeline LR"
 
 Characters that would break the grammar are escaped automatically (`#` → `#35;`, `: ` → `#58;`).
 
+Themes: Pele styles diagrams with CSS variables, so the theme menu applies colour presets (`js/themes.js`) to the
+preview and bakes them into SVG/PNG exports. The matching Mermaid theme name is written into the code's frontmatter so
+the diagram looks similar in other Mermaid tools.
+
 Mermaid has no native milestone/deadline concept in timelines, so item types are stored as an emoji prefix
 (e.g. `🏁 Go-live`). That keeps them visible in the chart and lets them survive copy & import.
-
-**Known Mermaid limitation:** in vertical (`TD`) mode Mermaid can draw a section header over the last item of the
-previous section when that period has several items. Horizontal mode is not affected.
 
 ## Project structure
 
@@ -67,6 +72,7 @@ js/model.js         data model, item types, Mermaid serialisation   ← start he
 js/parser.js        Mermaid code → model (import)
 js/generator.js     sprint / PI generator
 js/examples.js      built-in examples (add your own)
+js/themes.js        Pele colour presets (CSS variables)
 js/export.js        SVG / PNG download, clipboard
 js/storage.js       localStorage autosave, share-link encoding
 js/app.js           UI wiring
@@ -76,6 +82,7 @@ test/               node:test unit tests
 Typical extensions:
 
 - **New item type** – add an entry to `KINDS` in `js/model.js`.
+- **New colour theme** – add a preset to `PRESETS` in `js/themes.js` and its id to `THEMES` in `js/model.js`.
 - **New example / template** – add a string to `EXAMPLES` in `js/examples.js`.
 - **New diagram option** – add a field in `emptyTimeline()` / `normalize()`, write it in `toMermaid()`, read it in
   `parseMermaid()`, and add a control in `index.html` + `bindSettings()`.
