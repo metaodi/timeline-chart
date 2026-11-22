@@ -78,8 +78,28 @@ export function themeVars(theme, singleColour = false) {
   return vars;
 }
 
-/** Pele's built-in values for variables a preset does not set. */
-const PELE_DEFAULTS = { '--pele-bg': '#ffffff', '--pele-surface': '#f3f3f3' };
+/**
+ * Pele's built-in values for the variables a preset does not set (as used in
+ * its SVG output), in the order the Pele playground lists them.
+ */
+export const PELE_DEFAULTS = {
+  '--pele-bg': '#ffffff',
+  '--pele-fg': '#1f1f1f',
+  '--pele-fg-on-light': '#1f1f1f',
+  '--pele-fg-on-dark': '#ffffff',
+  '--pele-muted': '#6e6e6e',
+  '--pele-line': '#1f1f1f',
+  '--pele-surface': '#f3f3f3',
+  '--pele-surface-alt': '#e6e6e6',
+  '--pele-border': '#8a8a8a',
+  '--pele-accent': '#5b7bd5',
+  '--pele-critical': '#e45756',
+  '--pele-error': '#e45756',
+  '--pele-font': "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+  '--pele-title-weight': 'bold',
+  '--pele-heading-weight': 'bold',
+  '--pele-radius': '4px',
+};
 
 export const themeColour = (vars, name) => vars[name] ?? PELE_DEFAULTS[name];
 

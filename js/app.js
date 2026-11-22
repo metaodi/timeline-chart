@@ -4,6 +4,7 @@ import timeline from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/diagrams
 import gantt from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/diagrams/gantt.js';
 import { createGanttEditor } from './gantt-editor.js';
 import { styleGantt } from './gantt-style.js';
+import { peleCss } from './pele-css.js';
 import { emptyGantt, newGanttSection } from './gantt.js';
 import { toMermaid, normalize, isEmpty, newPeriod, newSection, THEMES, KINDS, getKind, stripKind, setKind } from './model.js';
 import { parseMermaid } from './parser.js';
@@ -333,9 +334,19 @@ let renderTimer = null;
 let currentCode = '';
 let mounted = null; // Pele mount: re-lays out the diagram whenever the preview resizes
 
+/** Code pane: Mermaid code or CSS for the Pele playground. */
+let codeTab = 'mermaid';
+let insideLabels = new Set(); // gantt task ids with labels on the bar (last preview layout)
+function showCode() {
+  const css = codeTab === 'css';
+  $('#code').textContent = css ? peleCss(state, insideLabels) : currentCode;
+  $('#copy-code').textContent = css ? 'Copy CSS' : 'Copy code';
+  $$('.code-tabs [data-code]').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.code === codeTab)));
+}
+
 function update() {
   currentCode = toMermaid(state);
-  $('#code').textContent = currentCode;
+  showCode();
   saveLocal(state);
   clearTimeout(renderTimer);
   renderTimer = setTimeout(renderPreview, 120);
@@ -352,7 +363,10 @@ function previewOptions() {
     zoom: 'auto',
     onError: showError,
     // Runs after every (re-)layout, including resizes.
-    onRender: () => styleGantt($('#preview svg.pele'), state),
+    onRender: () => {
+      insideLabels = styleGantt($('#preview svg.pele'), state);
+      if (codeTab === 'css') showCode(); // the CSS depends on the layout (labels on bars)
+    },
   };
 }
 
@@ -595,10 +609,17 @@ function bindToolbar() {
     }
   });
 
+  $$('.code-tabs [data-code]').forEach((tab) =>
+    tab.addEventListener('click', () => {
+      codeTab = tab.dataset.code;
+      showCode();
+    }),
+  );
   $('#copy-code').addEventListener('click', async () => {
     try {
-      await copyText(currentCode);
-      toast('Mermaid code copied');
+      const css = codeTab === 'css';
+      await copyText(css ? peleCss(state, insideLabels) : currentCode);
+      toast(css ? 'Pele CSS copied – paste it into the CSS tab of the playground' : 'Mermaid code copied');
     } catch {
       toast('Copy failed – select the code manually');
     }

@@ -12,6 +12,10 @@ Diagrams are rendered with [Pele](https://pele.run), a fast, lightweight Mermaid
 - **Sprint / PI generator**: start date, sprint length, sprints per PI, optional IP iteration, date labels
 - **Milestones & deadlines**: every item/period has a type (🏁 milestone, ⏰ deadline, 🚀 release, ⚠️ risk, ✅ done)
 - **Export**: download PNG or SVG (optionally transparent), copy the Mermaid code
+- **Pele playground**: the *Pele CSS* tab next to the Mermaid code gives CSS for the playground's CSS tab
+  ([pele.run](https://pele.run)) – a complete `.pele { --pele-… }` theme and, for Gantt charts, the colours of PIs,
+  sprints, sections, statuses and row stripes (by the task ids in the Mermaid code). Paste the Mermaid code and the
+  CSS there and the diagram looks like in this app; only the "…" shortening of long labels is not possible in CSS.
 - **Import** existing Mermaid timeline code, **share links** (the whole timeline is stored in the URL), autosave in the browser, undo/redo
 - Works on desktop and mobile (on phones the app switches to Edit / Preview / Code tabs)
 
@@ -114,6 +118,7 @@ js/examples.js      built-in examples (add your own)
 js/themes.js        Pele colour presets (CSS variables)
 js/export.js        SVG / PNG download, clipboard
 js/svg-vars.js      resolves CSS variables to concrete colours for SVG export
+js/pele-css.js      CSS for the Pele playground (theme + Gantt colours)
 js/storage.js       localStorage autosave, share-link encoding
 js/app.js           UI wiring
 test/               node:test unit tests

@@ -338,6 +338,13 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
   font-size: 0.875rem;
 }
 
+.code-tabs { display: flex; gap: 2px; }
+.code-tabs button {
+  border: 0; background: none; cursor: pointer; padding: 4px 8px; border-radius: 6px;
+  font-size: 0.95rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em;
+}
+.code-tabs button[aria-selected='true'] { color: var(--text); background: var(--surface-2); }
+
 .code {
   flex: 1; margin: 0; overflow: auto;
   background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius);
