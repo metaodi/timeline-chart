@@ -84,13 +84,13 @@ export const SECTION_COLOURS = 8;
 const AUTO_COLOURS = [1, 2, 3, 5, 6, 7, 8];
 
 /**
- * Theme colour (1..8) of a section: its chosen colour, or automatically the
- * next colours after those used by the PIs, so categories never look like a PI.
+ * Theme colour (1..8) of a section: its chosen colour, or automatically one
+ * per section (PIs and sprints are drawn in neutral black/grey).
  */
-export function sectionColour(g, si, cal = calendarOf(g)) {
+export function sectionColour(g, si) {
   const chosen = Number(g.sections[si]?.color) || 0;
   if (chosen >= 1 && chosen <= SECTION_COLOURS) return chosen;
-  return AUTO_COLOURS[(cal.pis.length + si) % AUTO_COLOURS.length];
+  return AUTO_COLOURS[si % AUTO_COLOURS.length];
 }
 
 /** Next free id with a prefix ("s" for sprints, "pi" for PIs) within the sprint plan. */

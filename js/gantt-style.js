@@ -10,7 +10,6 @@
 import { calendarOf, sectionColour } from './gantt.js';
 import { themeVars } from './themes.js';
 
-const SERIES = 8;
 const CHAR_WIDTH = 0.56; // average glyph width relative to the font size
 
 function luminance(hex) {
@@ -23,14 +22,19 @@ function luminance(hex) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-/** 1-based series index for a task id, or null to keep Pele's styling. */
-function seriesFor(id, cal, gantt) {
-  let m;
-  const pi = cal.pis.findIndex((p) => p.id === id);
-  if (pi >= 0) return (pi % SERIES) + 1;
-  const sprint = cal.sprints.find((sp) => sp.id === id);
-  if (sprint) return sprint.pi == null ? 1 : (sprint.pi % SERIES) + 1;
-  if ((m = /^g(\d+)t\d+$/.exec(id))) return sectionColour(gantt, Number(m[1]), cal);
+/** 1-based series index of a section task ("g2t0"), or null. */
+function seriesFor(id, gantt, cal) {
+  const m = /^g(\d+)t\d+$/.exec(id);
+  return m ? sectionColour(gantt, Number(m[1]), cal) : null;
+}
+
+/**
+ * PIs and sprints are neutral, so colours are left to the categories:
+ * PIs in the foreground colour (black in light themes), sprints in grey.
+ */
+function neutralFor(id, cal) {
+  if (cal.pis.some((p) => p.id === id)) return 'var(--_fg)';
+  if (cal.sprints.some((s) => s.id === id)) return 'var(--_m)';
   return null;
 }
 
@@ -58,13 +62,19 @@ export function styleGantt(svg, state) {
   const right = num(svg, 'width') || svg.viewBox?.baseVal?.width || Infinity;
 
   for (const g of tasks) {
-    const k = seriesFor(g.dataset.id, cal, state.gantt);
+    const k = seriesFor(g.dataset.id, state.gantt, cal);
+    const neutral = neutralFor(g.dataset.id, cal);
     const shape = g.querySelector('rect, path');
     const label = g.querySelector('text.pele-label');
     const crit = g.classList.contains('pele-crit');
     const done = g.classList.contains('pele-done');
     const active = g.classList.contains('pele-active');
 
+    if (neutral && shape) {
+      shape.setAttribute('fill', neutral);
+      shape.setAttribute('stroke', neutral);
+      shape.removeAttribute('fill-opacity');
+    }
     if (k && shape && !crit) {
       const colour = `var(--pele-series-${k})`;
       shape.setAttribute('fill', colour);
@@ -84,6 +94,7 @@ export function styleGantt(svg, state) {
     const lx = num(label, 'x');
     const inside = lx >= x && lx <= x + w;
     if (inside) {
+      if (neutral) label.setAttribute('fill', 'var(--_bg)');
       if (k && !crit) {
         const light = luminance(vars[`--pele-series-${k}`]) > 0.45;
         label.setAttribute('fill', done || light ? 'var(--_fg)' : '#ffffff');
