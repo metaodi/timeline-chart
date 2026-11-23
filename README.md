@@ -18,7 +18,9 @@ Diagrams are rendered with [Pele](https://pele.run), a fast, lightweight Mermaid
 - **Two chart types**: *Timeline* (periods with items) and *Gantt* (bars that span several sprints)
 - **Sprint / PI generator**: start date, sprint length, sprints per PI, optional IP iteration, date labels
 - **Milestones & deadlines**: every item/period has a type (🏁 milestone, ⏰ deadline, 🚀 release, ⚠️ risk, ✅ done)
-- **Export**: download PNG or SVG (optionally transparent), copy the Mermaid code
+- **Export**: download PNG or SVG (optionally transparent), copy the Mermaid code. The PNG size is picked next to
+  the PNG button: pixel density (1×–4×, default 2×) or a width in pixels (1280, 1920, 2560, 3840 or any other);
+  very large images are reduced to what browsers can draw (16.7 megapixels)
 - **Restore from an exported file**: PNG and SVG exports carry the complete app state (PNG `iTXt` chunk, SVG
   `<metadata>`). *Import → Open file…* or dropping the file on the page restores the diagram exactly as it was –
   durations, sprints, colours, notes and all settings (undo goes back). `.mmd` files are read as Mermaid code.
@@ -81,6 +83,9 @@ data.
   the preview shows it at full width and scrolls horizontally; **⤢ Wide** hides the editor so the chart can use the
   whole window. PNG/SVG exports have the same width as the preview (so the wide view gives a wide export). On phones
   it scales down (zoom for details) and exports use the chart's own width.
+  **Width min – max** (plan card) sets your own range in px instead of 1000–4000: the chart grows with the plan but
+  stays within it, and the desktop preview widens it only up to the maximum. Same value twice = fixed width (preview
+  and export alike), e.g. for a slide. Kept as `%% chart-width <min> <max>` (`auto` for an empty field).
 - **Colours**: PIs are black and sprints grey (in dark themes: light), so colour is left to the sections. Each section
   (e.g. a category of work) has its own colour: automatic (never red, which means *critical*) or chosen with the
   colour dot in the section header.

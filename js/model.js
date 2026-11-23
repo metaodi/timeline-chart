@@ -30,6 +30,7 @@
  * Line breaks inside any text are stored as "\n" and written as <br>.
  */
 
+import { cleanPngSize, DEFAULT_PNG_SIZE } from './export.js';
 import { emptyGantt, normalizeGantt, toGanttMermaid, isGanttEmpty } from './gantt.js';
 import { mermaidTheme } from './themes.js';
 
@@ -82,6 +83,7 @@ export function emptyTimeline() {
     theme: 'default',
     disableMulticolor: false,
     titleAlign: 'center', // 'center' | 'left' (applied to the rendered SVG, not part of Mermaid)
+    pngSize: DEFAULT_PNG_SIZE, // PNG export: pixel density ("2x") or target width ("1920px"), see export.js
     accTitle: '',
     accDescr: '',
     periods: [],
@@ -120,6 +122,7 @@ export function normalize(data) {
     : [];
   for (const k of ['title', 'accTitle', 'accDescr']) d[k] = String(d[k] ?? '');
   d.titleAlign = d.titleAlign === 'left' ? 'left' : 'center';
+  d.pngSize = cleanPngSize(d.pngSize) || DEFAULT_PNG_SIZE;
   return d;
 }
 

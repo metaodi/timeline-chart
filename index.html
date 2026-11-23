@@ -90,6 +90,8 @@
             <label class="check small"><input type="checkbox" id="transparent" /> Transparent</label>
             <button type="button" class="btn small" id="dl-svg">SVG</button>
             <button type="button" class="btn small primary" id="dl-png">PNG</button>
+            <select class="small" id="png-size" aria-label="PNG size" title="PNG size: pixel density or width in pixels"></select>
+            <input type="number" class="small" id="png-width" min="100" max="16384" step="10" placeholder="px" aria-label="PNG width in pixels" title="PNG width in pixels" hidden />
           </div>
         </div>
         <div class="preview" id="preview" aria-live="polite"></div>
