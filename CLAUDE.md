@@ -41,6 +41,7 @@ Plain ES modules in `js/`, one global app state (plain JSON) in `app.js`, re-ren
 | `themes.js` | colour presets (Pele CSS variables), `PELE_DEFAULTS`, row colour tokens |
 | `pele-css.js` | CSS for the Pele playground's CSS tab |
 | `export.js` / `storage.js` / `drag.js` | downloads + clipboard / autosave + share links / pointer-event drag & drop |
+| `splitter.js` | draggable divider that resizes the editor column (`--editor-w` on `.layout`, kept in localStorage) |
 | `embed.js` | full app state in exports (PNG `iTXt` chunk, SVG `<metadata id="timeline-builder">`) for a 1:1 restore |
 
 ### Rendering pipeline (order matters)

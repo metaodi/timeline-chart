@@ -12,6 +12,9 @@ Diagrams are rendered with [Pele](https://pele.run), a fast, lightweight Mermaid
   centred (Pele default) or aligned left (applied to preview and PNG/SVG export)
 - **Responsive diagrams**: the preview re-lays out to the available width; on narrow screens a wide horizontal
   timeline switches to vertical automatically (toggle "Responsive"). Pinch/scroll zoom is built in.
+- **Resizable editor** (desktop): drag the divider between editor and preview (or focus it and use ←/→, Shift for
+  bigger steps) to make the editor wider while editing and narrower to look at the chart; double-click resets it.
+  The width is remembered.
 - **Two chart types**: *Timeline* (periods with items) and *Gantt* (bars that span several sprints)
 - **Sprint / PI generator**: start date, sprint length, sprints per PI, optional IP iteration, date labels
 - **Milestones & deadlines**: every item/period has a type (🏁 milestone, ⏰ deadline, 🚀 release, ⚠️ risk, ✅ done)
