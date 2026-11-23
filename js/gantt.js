@@ -10,6 +10,7 @@
  *   showSprints: boolean,      // a "Sprints" row
  *   excludeWeekends: boolean,
  *   todayMarker: boolean,
+ *   endDates: '' | 'dmy' | 'iso', // end date (with a dot) after bars and milestones
  *   sections: [{ name, color, tasks: Task[] }],   // color: 0 = automatic, 1..8 = theme colour
  * }
  * Task = {
@@ -17,6 +18,7 @@
  *   name: string,
  *   type: 'task' | 'milestone' | 'deadline',
  *   status: '' | 'done' | 'active' | 'crit',
+ *   look: '' | 'hatch' | 'option',  // bars only: hatched (independent work package) / dashed outline (option)
  *   from: Start,         // where a bar starts / where a milestone or deadline sits
  *   duration: string,    // "2s" sprints, "3w" weeks, "10d" working days; "" = until `to`
  *   to: Ref,             // end when no duration is given
@@ -46,6 +48,20 @@ export const STATUSES = [
   { id: 'crit', label: 'Critical' },
 ];
 
+/** Bar looks that Mermaid can't express (kept in a comment, drawn by gantt-style.js). */
+export const LOOKS = [
+  { id: '', label: 'Solid' },
+  { id: 'hatch', label: 'Hatched (independent)' },
+  { id: 'option', label: 'Dashed (option)' },
+];
+/** Formats of the end dates drawn after bars and milestones ('' = none). */
+export const END_DATE_FORMATS = [
+  { id: '', label: 'No end dates' },
+  { id: 'dmy', label: 'End dates 31.03.2027' },
+  { id: 'iso', label: 'End dates 2027-03-31' },
+];
+const LOOKS_KEY = 'task-looks';
+const END_DATES_KEY = 'end-dates';
 const CAL_KEY = 'sprint-calendar';
 const PLAN_KEY = 'sprint-plan';
 const COLOURS_KEY = 'section-colours';
@@ -72,6 +88,7 @@ export function emptyGantt() {
     layout: 'compact', // 'compact' (packed by date) | 'ordered' (one row per entry, editor order)
     excludeWeekends: false, // kept for imported charts; no UI (clean look)
     todayMarker: false,
+    endDates: '', // see END_DATE_FORMATS
     sections: [],
   };
 }
@@ -140,6 +157,7 @@ export function normalizeGantt(g) {
   for (const k of ['showPIs', 'showSprints', 'excludeWeekends', 'todayMarker']) d[k] = Boolean(d[k]);
   d.showNotes = d.showNotes !== false;
   d.layout = d.layout === 'ordered' ? 'ordered' : 'compact';
+  d.endDates = END_DATE_FORMATS.some((f) => f.id === d.endDates) ? d.endDates : '';
   d.rows = [0, 1].map((i) => (isRowToken(d.rows?.[i]) ? d.rows[i].toLowerCase() : ROW_PRESETS.standard.rows[i]));
   d.pis = Array.isArray(d.pis) ? normalizePlan(d.pis) : sprintPlanFromConfig(d.calendar);
   // every sprint needs a unique id (tasks reference them)
@@ -150,6 +168,7 @@ export function normalizeGantt(g) {
   }
   const types = TASK_TYPES.map((t) => t.id);
   const statuses = STATUSES.map((s) => s.id);
+  const looks = LOOKS.map((l) => l.id);
   d.sections = Array.isArray(d.sections)
     ? d.sections.map((s) => ({
         name: String(s?.name ?? ''),
@@ -160,6 +179,7 @@ export function normalizeGantt(g) {
               name: String(t?.name ?? ''),
               type: types.includes(t?.type) ? t.type : 'task',
               status: statuses.includes(t?.status) ? t.status : '',
+              look: looks.includes(t?.look) ? t.look : '',
               from: String(t?.from || 'prev'),
               duration: /^\d+[swd]$/.test(t?.duration ?? '') ? t.duration : '',
               note: String(t?.note ?? ''), // details: tooltip + footnote (gantt-notes.js)
@@ -390,6 +410,11 @@ export function toGanttMermaid(t, frontmatter = []) {
   const notes = {};
   g.sections.forEach((s, si) => s.tasks.forEach((t, ti) => t.note?.trim() && (notes[`g${si}t${ti}`] = t.note.trim())));
   if (Object.keys(notes).length) out.push(`  %% ${NOTES_KEY} ${JSON.stringify(notes)}${g.showNotes === false ? ' hidden' : ''}`);
+  // hatched / dashed bars ({"g0t1": "hatch"}) and end dates: drawn by this app only
+  const looks = {};
+  g.sections.forEach((s, si) => s.tasks.forEach((t, ti) => t.look && t.type === 'task' && (looks[`g${si}t${ti}`] = t.look)));
+  if (Object.keys(looks).length) out.push(`  %% ${LOOKS_KEY} ${JSON.stringify(looks)}`);
+  if (g.endDates) out.push(`  %% ${END_DATES_KEY} ${g.endDates}`);
   g.sections.forEach((s, si) => {
     const lines = s.tasks
       .map((task, ti) => {
@@ -400,7 +425,9 @@ export function toGanttMermaid(t, frontmatter = []) {
           // keep the range inside the chart, or Pele would stretch the time axis
           const d = when.start.getTime();
           const room = Math.min((d - scale.start) / 864e5, (scale.end - d) / 864e5 + 1);
-          span = Math.min(milestoneSpan(task.name, scale.pxPerDay), Math.floor(room));
+          // (with end dates the label also holds the date)
+          const label = g.endDates ? `${task.name} 00.00.0000` : task.name;
+          span = Math.min(milestoneSpan(label, scale.pxPerDay), Math.floor(room));
         }
         return taskLine(task, when, `g${si}t${ti}`, span);
       })
@@ -475,6 +502,7 @@ export function parseGanttMermaid(code) {
   let seenHeader = false;
   let colours = [];
   let notes = {};
+  let looks = {};
   const links = {};
 
   String(code)
@@ -494,6 +522,15 @@ export function parseGanttMermaid(code) {
           } catch {
             res.warnings.push(`Line ${i + 1}: could not read the notes`);
           }
+        } else if (line.startsWith(`%% ${LOOKS_KEY} `)) {
+          try {
+            looks = JSON.parse(line.slice(`%% ${LOOKS_KEY} `.length));
+          } catch {
+            res.warnings.push(`Line ${i + 1}: could not read the bar looks`);
+          }
+        } else if (line.startsWith(`%% ${END_DATES_KEY} `)) {
+          const f = line.slice(`%% ${END_DATES_KEY} `.length).trim();
+          if (END_DATE_FORMATS.some((x) => x.id === f)) g.endDates = f;
         } else if (line.includes(ROWS_KEY)) {
           const rows = line.slice(line.indexOf(ROWS_KEY) + ROWS_KEY.length).split(',').map((x) => x.trim());
           if (rows.length === 2 && rows.every(isRowToken)) g.rows = rows;
@@ -594,11 +631,21 @@ export function parseGanttMermaid(code) {
     sec.tasks.forEach((t, ti) => {
       t.note = String(notes[`g${si}t${ti}`] ?? '');
       t.link = String(links[`g${si}t${ti}`] ?? '');
+      t.look = t.type === 'task' && LOOKS.some((l) => l.id && l.id === looks[`g${si}t${ti}`]) ? looks[`g${si}t${ti}`] : '';
     }),
   );
   snapToSprints(g);
   if (!seenHeader) res.warnings.unshift('No "gantt" header found');
   return res;
+}
+
+/** End date as drawn after a bar or milestone ("31.03.2027" or "2027-03-31"). */
+export function formatEndDate(date, format) {
+  if (!date || !format) return '';
+  const iso = isoDate(date);
+  if (format === 'iso') return iso;
+  const [y, m, d] = iso.split('-');
+  return `${d}.${m}.${y}`;
 }
 
 /** Replace dates that fall exactly on sprint boundaries with sprint references. */

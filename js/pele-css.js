@@ -7,7 +7,8 @@
  * reproduces what gantt-style.js does to the SVG in this app – PIs black,
  * sprints grey, a colour per section, statuses and row stripes – using the task
  * ids that the generated Mermaid code contains ("pi1", "s3", "g0t2").
- * Not possible in CSS: shortening labels that run into the next bar.
+ * Not possible in CSS: shortening labels that run into the next bar, end dates,
+ * and hatching (hatched bars are drawn light with an outline instead).
  */
 import { themeVars, rowColour, PELE_DEFAULTS } from './themes.js';
 import { calendarOf, sectionColour } from './gantt.js';
@@ -88,6 +89,22 @@ export function peleCss(state, insideLabels = new Set()) {
     // (more specific than the section rule, which also sets the stroke)
     block('.pele-gantt g.pele-task.pele-active[data-id] > :is(rect, path)', { stroke: 'var(--pele-fg)', 'stroke-width': '1.5' }),
   );
+  // Bar looks: dashed outline (option); hatched bars need an SVG pattern -> light fill + outline
+  const lookIds = (look) => g.sections.flatMap((sec, si) => sec.tasks.map((t, ti) => (t.type === 'task' && t.look === look ? `g${si}t${ti}` : null))).filter(Boolean);
+  // !important: the section and status rules above are more specific
+  const imp = (decls) => Object.fromEntries(Object.entries(decls).map(([k, v]) => [k, `${v} !important`]));
+  const [opts, hatched] = [lookIds('option'), lookIds('hatch')];
+  if (opts.length || hatched.length) out.push('/* Looks: option (dashed), independent (hatched – approximated) */');
+  if (opts.length)
+    out.push(
+      block(`${tasks(opts)} > rect`, imp({ fill: 'var(--pele-bg)', 'fill-opacity': '1', 'stroke-width': '1.5', 'stroke-dasharray': '5 3' })),
+      block(`${tasks(opts)} > .pele-label`, imp({ fill: 'var(--pele-fg)' })),
+    );
+  if (hatched.length)
+    out.push(
+      block(`${tasks(hatched)} > rect`, imp({ 'fill-opacity': '0.45', 'stroke-width': '1.5' })),
+      block(`${tasks(hatched)} > .pele-label`, imp({ fill: 'var(--pele-fg)' })),
+    );
   // Pele does not mark whether the label of an "in progress" task sits on the bar
   // (it draws those bars light). The app's last layout tells: colour those labels.
   g.sections.forEach((sec, si) => {

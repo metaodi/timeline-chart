@@ -457,13 +457,22 @@ function exportSvg() {
   try {
     // Same width as the preview (e.g. the wide view): what you see is what you export.
     const { svg } = render(previewCode(), { padding: 16 });
-    const el = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
+    const el = document.importNode(new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement, true);
     const vars = themeVars(state.theme, state.disableMulticolor);
     applyVars(el, vars);
-    collapseCalendarRows(el, state);
-    styleGantt(el, state);
-    alignTitle(el, state.titleAlign);
-    if (state.mode === 'gantt') addNotes(el, state);
+    // attached (off screen) while post-processing, so text widths can be measured
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-100000px;top:0;visibility:hidden';
+    host.append(el);
+    document.body.append(host);
+    try {
+      collapseCalendarRows(el, state);
+      styleGantt(el, state);
+      alignTitle(el, state.titleAlign);
+      if (state.mode === 'gantt') addNotes(el, state);
+    } finally {
+      host.remove();
+    }
     const background = $('#transparent').checked ? null : vars['--pele-bg'];
     return { el, background };
   } catch (err) {

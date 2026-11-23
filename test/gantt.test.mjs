@@ -209,3 +209,45 @@ test('milestones close together get separate ranges that overlap (own rows), ins
   const [, c2] = range('Very last day');
   assert.ok(c2 <= '2026-05-22', 'range stays inside the chart (no longer time axis)');
 });
+
+test('bar looks and end dates: written as comments, restored on import', async () => {
+  const { formatEndDate } = await import('../js/gantt.js');
+  const t = (name, look, extra = {}) => ({ name, type: 'task', from: '2026-10-15', duration: '', to: '2026-11-09', look, ...extra });
+  const state = {
+    mode: 'gantt',
+    gantt: {
+      endDates: 'dmy',
+      sections: [{ name: 'Work', tasks: [t('A', 'hatch'), t('B', 'option'), t('C', ''), { name: 'M', type: 'milestone', from: '2026-10-01', look: 'hatch' }] }],
+    },
+  };
+  const code = toMermaid(state);
+  assert.match(code, /%% task-looks \{"g0t0":"hatch","g0t1":"option"\}\n/); // not for milestones
+  assert.match(code, /%% end-dates dmy\n/);
+  const g = parseMermaid(code).timeline.gantt;
+  assert.deepEqual(g.sections[0].tasks.map((x) => x.look), ['hatch', 'option', '', '']);
+  assert.equal(g.endDates, 'dmy');
+  // nothing written by default, unknown values dropped
+  assert.doesNotMatch(toMermaid({ mode: 'gantt', gantt: { sections: [{ name: 'W', tasks: [t('A', '')] }] } }), /task-looks|end-dates/);
+  const n = normalize({ mode: 'gantt', gantt: { endDates: 'xyz', sections: [{ name: 'W', tasks: [t('A', 'zigzag')] }] } });
+  assert.equal(n.gantt.endDates, '');
+  assert.equal(n.gantt.sections[0].tasks[0].look, '');
+  // date formats
+  const d = new Date(Date.UTC(2027, 2, 31));
+  assert.equal(formatEndDate(d, 'dmy'), '31.03.2027');
+  assert.equal(formatEndDate(d, 'iso'), '2027-03-31');
+  assert.equal(formatEndDate(d, ''), '');
+  assert.equal(formatEndDate(null, 'dmy'), '');
+});
+
+test('EBP example: EBP theme, end dates, hatched and dashed bars, round trip', async () => {
+  const { EXAMPLES } = await import('../js/examples.js');
+  const state = normalize(EXAMPLES['Gantt: EBP project']());
+  assert.equal(state.theme, 'ebp');
+  assert.equal(state.gantt.endDates, 'dmy');
+  const looks = state.gantt.sections.flatMap((s) => s.tasks.map((t) => t.look)).filter(Boolean);
+  assert.deepEqual(looks, ['hatch', 'option']);
+  const back = parseMermaid(toMermaid(state)).timeline;
+  assert.equal(back.theme, 'ebp');
+  assert.deepEqual(back.gantt.sections.flatMap((s) => s.tasks.map((t) => [t.name, t.from, t.to, t.look])),
+    state.gantt.sections.flatMap((s) => s.tasks.map((t) => [t.name, t.from, t.to, t.look])));
+});

@@ -38,3 +38,11 @@ test('gantt: section names cannot break out of CSS comments', () => {
   state.gantt.sections[0].name = 'Evil */ .pele { display: none } /*';
   assert.doesNotMatch(peleCss(state), /\*\/ \.pele \{ display/);
 });
+
+test('gantt: dashed (option) and hatched bars in the playground CSS', () => {
+  const t = (look) => ({ name: look || 'x', type: 'task', from: '2026-10-15', duration: '', to: '2026-11-09', look });
+  const css = peleCss(normalize({ mode: 'gantt', gantt: { sections: [{ name: 'W', tasks: [t('option'), t('hatch'), t('')] }] } }));
+  assert.match(css, /\[data-id="g0t0"\]\) > rect \{[^}]*stroke-dasharray: 5 3 !important/);
+  assert.match(css, /\[data-id="g0t1"\]\) > rect \{[^}]*fill-opacity: 0\.45 !important/);
+  assert.doesNotMatch(css, /\[data-id="g0t2"\]\) > rect/);
+});

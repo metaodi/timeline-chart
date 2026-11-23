@@ -52,8 +52,58 @@ export function ganttExample(startDate = nextMonday()) {
   };
 }
 
+/**
+ * Project schedule in the EBP style: EBP theme, one row per entry, end dates,
+ * a hatched independent work package and a dashed option (fixed dates).
+ */
+export function ebpExample() {
+  const task = (id, name, from, to, extra = {}) => ({ id, name, type: 'task', status: '', from, duration: '', to, ...extra });
+  const point = (id, name, from) => ({ id, name, type: 'milestone', status: 'crit', from, duration: '', to: '' });
+  return {
+    mode: 'gantt',
+    theme: 'ebp',
+    title: 'Schedule',
+    titleAlign: 'left',
+    gantt: {
+      calendar: { startDate: '' },
+      pis: [],
+      showPIs: false,
+      showSprints: false,
+      layout: 'ordered',
+      rows: ['none', 'none'],
+      endDates: 'dmy',
+      sections: [
+        { name: 'Start', color: 4, tasks: [point('start', 'Project start', '2026-10-01')] },
+        {
+          name: 'Work packages',
+          color: 1,
+          tasks: [
+            task('cat', 'Symbol catalogue', '2026-10-15', '2026-11-09'),
+            task('lines', 'Line orientation', '2026-10-15', '2026-12-07'),
+            task('ocr', 'Text recognition and matching', '2026-11-02', '2027-03-31', { look: 'hatch', note: 'Independent work package' }),
+            task('test', 'Network segmentation test area', '2026-12-01', '2027-04-30'),
+            task('vec', 'Vectorisation of the terrain map (incl. labelling)', '2027-02-01', '2027-07-31'),
+            task('net', 'Network segmentation', '2027-05-03', '2027-09-30'),
+            task('sym', 'Symbolisation of the vector data', '2027-10-01', '2027-10-31', { look: 'option', note: 'Option' }),
+          ],
+        },
+        {
+          name: 'Client approval',
+          color: 2,
+          tasks: [
+            task('ok1', 'Approval: line orientation', '2026-12-08', '2026-12-31'),
+            task('ok2', 'Approval: test area', '2027-05-03', '2027-05-31'),
+          ],
+        },
+        { name: 'Acceptance', color: 4, tasks: [point('done', 'Acceptance of the vector data', '2027-11-01')] },
+      ],
+    },
+  };
+}
+
 export const EXAMPLES = {
   'Gantt: PI roadmap (durations)': () => ganttExample(),
+  'Gantt: EBP project': () => ebpExample(),
   'PI plan (SAFe, sprints per PI)': `timeline
   title ART Phoenix – PI 2026.1
   section PI 2026.1 <br> 5 Jan – 13 Mar

@@ -3,7 +3,7 @@
  * epics…) and tasks defined by a start rule and a duration. Concrete dates are
  * computed by scheduleGantt() and shown under each task.
  */
-import { TASK_TYPES, STATUSES, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
+import { TASK_TYPES, STATUSES, LOOKS, END_DATE_FORMATS, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
 import { themeVars, rowColour, themeColour } from './themes.js';
 import { sortable, moveBetween } from './drag.js';
 import { formatDate, isoDate, nextName } from './generator.js';
@@ -98,6 +98,12 @@ export function createGanttEditor(root, api) {
     const status = `<select class="status" data-gfield="status" data-gs="${s}" data-gt="${t}" aria-label="Status">${STATUSES.map(
       (x) => option(x.id, x.label, x.id === task.status),
     ).join('')}</select>`;
+    const look =
+      task.type === 'task'
+        ? `<select class="look" data-gfield="look" data-gs="${s}" data-gt="${t}" aria-label="Look">${LOOKS.map((x) =>
+            option(x.id, x.label, x.id === (task.look ?? '')),
+          ).join('')}</select>`
+        : '';
     const when =
       task.type === 'task'
         ? `<label>Start ${startSelect(task, s, t, cal, planStart)}</label><label>Duration ${durationInputs(task, s, t, cal)}</label>`
@@ -110,7 +116,7 @@ export function createGanttEditor(root, api) {
         <textarea rows="1" data-gfield="name" data-gs="${s}" data-gt="${t}" placeholder="${placeholder}">${esc(task.name)}</textarea>
         <span class="tools">${iconBtn('task-up', 'Move up', '↑')}${iconBtn('task-down', 'Move down', '↓')}${iconBtn('task-dup', 'Duplicate', '⧉')}${iconBtn('task-delete', 'Delete', '✕', 'del')}</span>
       </div>
-      <div class="gtask-when">${when}${status}${iconBtn('note', task.note?.trim() ? 'Edit note' : 'Add a note (hover + below the chart)', '📝', task.note?.trim() ? 'has-note' : '')}${iconBtn('link', task.link ? 'Edit link' : 'Add a link (the entry becomes clickable)', '🔗', task.link ? 'has-note' : '')}</div>
+      <div class="gtask-when">${when}${status}${look}${iconBtn('note', task.note?.trim() ? 'Edit note' : 'Add a note (hover + below the chart)', '📝', task.note?.trim() ? 'has-note' : '')}${iconBtn('link', task.link ? 'Edit link' : 'Add a link (the entry becomes clickable)', '🔗', task.link ? 'has-note' : '')}</div>
       ${noteOpen.has(task.id) || task.note?.trim() ? `<textarea rows="1" class="gnote" data-gfield="note" data-gs="${s}" data-gt="${t}" placeholder="Note – shown on hover and below the chart; URLs become links">${esc(task.note ?? '')}</textarea>` : ''}
       ${linkOpen.has(task.id) || task.link ? `<input type="url" class="gnote glink" data-gfield="link" data-gs="${s}" data-gt="${t}" value="${esc(task.link ?? '')}" placeholder="https://… – opens when the entry is clicked" inputmode="url" />` : ''}
       <div class="gtask-dates">${describe(sched.dates[s][t], task.type)}</div>
@@ -216,6 +222,12 @@ export function createGanttEditor(root, api) {
         <select data-glayout aria-label="Order of the entries">
           ${option('compact', 'Compact – packed by start date', g().layout !== 'ordered')}
           ${option('ordered', 'In my order – one row per entry', g().layout === 'ordered')}
+        </select>
+      </div>
+      <div class="grows">
+        <span class="muted small">Dates</span>
+        <select data-genddates aria-label="End dates after bars and milestones">
+          ${END_DATE_FORMATS.map((f) => option(f.id, f.label, f.id === g().endDates)).join('')}
         </select>
       </div>
       ${rowsHtml()}
@@ -465,6 +477,10 @@ export function createGanttEditor(root, api) {
       api.change(() => (g().layout = el.value === 'ordered' ? 'ordered' : 'compact'));
       return;
     }
+    if (el.hasAttribute('data-genddates')) {
+      api.change(() => (g().endDates = END_DATE_FORMATS.some((f) => f.id === el.value) ? el.value : ''));
+      return;
+    }
     if (el.dataset.grows) {
       const which = el.dataset.grows;
       if (which === 'preset') {
@@ -506,6 +522,9 @@ export function createGanttEditor(root, api) {
           break;
         case 'status':
           task.status = el.value;
+          break;
+        case 'look':
+          task.look = LOOKS.some((l) => l.id === el.value) ? el.value : '';
           break;
         case 'link': {
           // add https:// to bare addresses like "jira.example.com/ABC-1"
