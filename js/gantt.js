@@ -129,6 +129,8 @@ export function emptyGantt() {
     showSprints: true,
     rows: [...ROW_PRESETS.standard.rows], // zebra stripes of the chart rows
     showNotes: true, // numbered notes below the chart
+    showLegend: true, // legend below the chart (only elements that occur)
+    legendLabels: {}, // own legend texts, e.g. { "status-done": "Erledigt" }
     layout: 'compact', // 'compact' (packed by date) | 'ordered' (one row per entry, editor order)
     excludeWeekends: false, // kept for imported charts; no UI (clean look)
     todayMarker: false,
@@ -205,6 +207,13 @@ export function normalizeGantt(g) {
   d.calendar = { ...DEFAULT_CALENDAR, ...(d.calendar || {}) };
   for (const k of ['showPIs', 'showSprints', 'excludeWeekends', 'todayMarker']) d[k] = Boolean(d[k]);
   d.showNotes = d.showNotes !== false;
+  d.showLegend = d.showLegend !== false;
+  // own legend texts per entry kind (see LEGEND_DEFAULTS in gantt-legend.js); empty = default
+  d.legendLabels = Object.fromEntries(
+    Object.entries(d.legendLabels && typeof d.legendLabels === 'object' ? d.legendLabels : {})
+      .filter(([k, v]) => /^[a-z-]+$/.test(k) && typeof v === 'string' && v.trim())
+      .map(([k, v]) => [k, v.slice(0, 80)]),
+  );
   d.layout = d.layout === 'ordered' ? 'ordered' : 'compact';
   // (first version: endDates was the format, meaning "all")
   if (END_DATE_FORMATS.some((f) => f.id === d.endDates)) [d.endDateFormat, d.endDates] = [d.endDates, 'all'];

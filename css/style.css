@@ -537,3 +537,16 @@ body.dragging .gtasks:empty, body.dragging .periods:empty, body.dragging .events
 @media (max-width: 720px) {
   .gnote { margin-left: 4px; width: calc(100% - 4px); font-size: 16px; }
 }
+
+/* ---------------------------------------------------------------- legend texts */
+
+.glegend summary { cursor: pointer; font-size: 0.85rem; color: var(--muted); }
+.glegend-list { display: grid; gap: 4px; margin-top: 6px; }
+.glegend-row { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); align-items: center; gap: 8px; }
+.glegend-row input {
+  min-height: 30px; padding: 2px 8px; font-size: 0.85rem; min-width: 0;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);
+}
+@media (max-width: 720px) {
+  .glegend-row input { font-size: 16px; min-height: 36px; }
+}
