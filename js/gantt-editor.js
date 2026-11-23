@@ -3,7 +3,7 @@
  * epics…) and tasks defined by a start rule and a duration. Concrete dates are
  * computed by scheduleGantt() and shown under each task.
  */
-import { TASK_TYPES, STATUSES, LOOKS, END_DATE_MODES, END_DATE_FORMATS, showsEndDate, AXIS_PRESETS, TICK_UNITS, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI, cleanWidthRange, AUTO_WIDTH, WIDTH_LIMITS } from './gantt.js';
+import { TASK_TYPES, STATUSES, LOOKS, END_DATE_MODES, END_DATE_FORMATS, showsEndDate, AXIS_PRESETS, TICK_UNITS, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI, cleanWidthRange, widthRange, widthLabel, WIDTH_LIMITS } from './gantt.js';
 import { themeVars, rowColour, themeColour } from './themes.js';
 import { sortable, moveBetween } from './drag.js';
 import { formatDate, isoDate, nextName } from './generator.js';
@@ -249,19 +249,28 @@ export function createGanttEditor(root, api) {
     </div>`;
   }
 
-  /** Chart width range in px (empty = automatic, min = max = fixed width). */
+  /** Chart width range: a slider with two thumbs (min, max; both together = fixed width). */
   function widthHtml() {
-    const { minWidth, maxWidth } = g();
-    const field = (key, value, auto, label) =>
-      `<input type="number" data-gwidth="${key}" min="${WIDTH_LIMITS.min}" max="${WIDTH_LIMITS.max}" step="10"
-        value="${value || ''}" placeholder="${auto}" aria-label="${label}" title="${label} in px (empty = automatic)" />`;
-    return `<div class="grows gwidth" title="Chart width in pixels. Same value twice = fixed width.">
+    const { min, max, custom } = widthRange(g());
+    const { min: lo, max: hi, step } = WIDTH_LIMITS;
+    const thumb = (key, value, label) =>
+      `<input type="range" data-gwidth="${key}" min="${lo}" max="${hi}" step="${step}" value="${value}"
+        aria-label="${label}" aria-valuetext="${value} px" />`;
+    return `<div class="grows gwidth" title="Chart width in pixels: drag both handles together for a fixed width">
         <span class="muted small">Width</span>
-        ${field('min', minWidth, AUTO_WIDTH.min, 'Minimum width')}
-        <span class="muted small">–</span>
-        ${field('max', maxWidth, AUTO_WIDTH.max, 'Maximum width')}
-        <span class="muted small">px</span>
+        <div class="range2" style="${rangeStyle(min, max)}">
+          ${thumb('min', min, 'Minimum chart width')}${thumb('max', max, 'Maximum chart width')}
+        </div>
+        <span class="muted small gwidth-val">${widthLabel(g())}</span>
+        ${custom ? '<button type="button" class="btn small" data-gaction="width-auto" title="Automatic width (1000 – 4000 px)">Auto</button>' : ''}
       </div>`;
+  }
+
+  /** Position of the highlighted part of the width slider; the min thumb on top in the right half (overlap). */
+  function rangeStyle(min, max) {
+    const { min: lo, max: hi } = WIDTH_LIMITS;
+    const at = (v) => Math.max(0, Math.min(1, (v - lo) / (hi - lo))).toFixed(4);
+    return `--lo:${at(min)};--hi:${at(max)};--min-z:${at(min) > 0.5 ? 2 : 0}`;
   }
 
   let axisCustom = false; // "Custom…" chosen, even while the values still match a preset
@@ -400,6 +409,7 @@ export function createGanttEditor(root, api) {
     return before ? nextName(before.name.trim()) : first;
   }
   const actions = {
+    'width-auto': () => api.change(() => Object.assign(g(), { minWidth: 0, maxWidth: 0 })),
     calendar: () => api.openCalendar(),
     link: ({ s, t }) => {
       const sel = `[data-gfield="link"][data-gs="${s}"][data-gt="${t}"]`;
@@ -509,6 +519,22 @@ export function createGanttEditor(root, api) {
 
   root.addEventListener('input', (ev) => {
     const el = ev.target;
+    // Width slider: update the chart while dragging; the thumbs cannot pass each other
+    if (el.dataset.gwidth) {
+      api.snapshotTyping();
+      const range = widthRange(g());
+      const isMin = el.dataset.gwidth === 'min';
+      const value = isMin ? Math.min(Number(el.value), range.max) : Math.max(Number(el.value), range.min);
+      el.value = value;
+      el.setAttribute('aria-valuetext', `${value} px`);
+      Object.assign(g(), cleanWidthRange(isMin ? value : g().minWidth, isMin ? g().maxWidth : value));
+      const row = el.closest('.gwidth');
+      const now = widthRange(g());
+      row.querySelector('.range2').style.cssText = rangeStyle(now.min, now.max);
+      row.querySelector('.gwidth-val').textContent = widthLabel(g());
+      api.update();
+      return;
+    }
     // PI / sprint names: update the chart while typing (dates do not change)
     if (el.dataset.gpfield === 'pi-name' || el.dataset.gpfield === 'sp-name') {
       api.snapshotTyping();
@@ -562,10 +588,7 @@ export function createGanttEditor(root, api) {
       return;
     }
     if (el.dataset.gwidth) {
-      api.change(() => {
-        g()[el.dataset.gwidth === 'min' ? 'minWidth' : 'maxWidth'] = Number(el.value) || 0;
-        Object.assign(g(), cleanWidthRange(g().minWidth, g().maxWidth));
-      });
+      render(); // state is already set while dragging; show the "Auto" button
       return;
     }
     if (el.dataset.genddates === 'mode') {

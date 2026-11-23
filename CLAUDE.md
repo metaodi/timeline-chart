@@ -75,7 +75,7 @@ included). On phones both use the code's own width.
 - `layout` (`compact` | `ordered`), `rows` (stripe tokens), `showPIs`, `showSprints`, `showNotes`, `endDates`
   (`''` | `all` | `some`: dot + date after bars/milestones; the chart's viewBox grows on the right to fit),
   `endDateFormat` (`dmy` | `iso`).
-  `minWidth` / `maxWidth` (px, 0 = automatic 1000 / 4000; `widthRange()`): bounds for `useWidth` and for the
+  `minWidth` / `maxWidth` (px, 0 = automatic 1000 / 4000; `widthRange()`; UI: two-thumb slider `.range2`): bounds for `useWidth` and for the
   desktop preview's widening (`previewCode()`); `%% chart-width <min|auto> <max|auto>`.
   `axisFormat` (strftime, `''` = `%d %b`) and `tickInterval` (`Nday|Nweek|Nmonth`, `''` = one per sprint): written as
   Mermaid `axisFormat` / `tickInterval`; on import a tick equal to the sprint length becomes `''` again.
