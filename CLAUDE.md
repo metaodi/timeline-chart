@@ -56,7 +56,8 @@ post-processing on the SVG, in this order:
 
 Export post-processes the SVG attached off screen (text widths are measured with `getComputedTextLength`). Export
 additionally: `applyVars` (theme variables on the root) and, in `svgMarkup`, `inlineCssVars` + a background
-`<rect>`. On desktop the preview widens Gantt charts to at least the preview width (`previewCode()` raises
+`<rect>`. The PNG is rasterised at `state.pngSize` (`2x` density or `1920px` width, `pngScale()` in `export.js`,
+capped at 16.7 megapixels / 16384px a side for iOS). On desktop the preview widens Gantt charts to at least the preview width (`previewCode()` raises
 `useWidth`), and exports use the same `previewCode()` – the export is as wide as what the user sees (wide view
 included). On phones both use the code's own width.
 
@@ -74,6 +75,8 @@ included). On phones both use the code's own width.
 - `layout` (`compact` | `ordered`), `rows` (stripe tokens), `showPIs`, `showSprints`, `showNotes`, `endDates`
   (`''` | `all` | `some`: dot + date after bars/milestones; the chart's viewBox grows on the right to fit),
   `endDateFormat` (`dmy` | `iso`).
+  `minWidth` / `maxWidth` (px, 0 = automatic 1000 / 4000; `widthRange()`): bounds for `useWidth` and for the
+  desktop preview's widening (`previewCode()`); `%% chart-width <min|auto> <max|auto>`.
   `axisFormat` (strftime, `''` = `%d %b`) and `tickInterval` (`Nday|Nweek|Nmonth`, `''` = one per sprint): written as
   Mermaid `axisFormat` / `tickInterval`; on import a tick equal to the sprint length becomes `''` again.
 - Task `id` (`t…`) is stable (for `after:` refs). **In the Mermaid code** tasks are `g<section>t<index>`, sprints `sN`,
@@ -83,7 +86,7 @@ included). On phones both use the code's own width.
 
 Concrete dates only (Mermaid can't express our scheduling). Everything Mermaid can't hold goes into `%%` comments
 that the importer reads back: `%% sprint-calendar …`, `%% sprint-plan [json]`, `%% section-colours …`,
-`%% row-colours …`, `%% notes {json}`, `%% task-looks {json}`, `%% end-dates <mode> <format>`, `%% end-date-tasks {json}`. App-only themes (e.g. `ebp`)
+`%% row-colours …`, `%% notes {json}`, `%% task-looks {json}`, `%% end-dates <mode> <format>`, `%% end-date-tasks {json}`, `%% chart-width …`. App-only themes (e.g. `ebp`)
 write the closest Mermaid theme plus a YAML comment `# timeline-builder theme: …` in the frontmatter. Links use standard `click <id> href "…"`. Layout = presence of
 `displayMode: compact` in the frontmatter; `useWidth` sets the chart width. Durations/`after` rules come back as
 fixed sprints/dates on import (share links, autosave and exported PNG/SVG files keep the full state).

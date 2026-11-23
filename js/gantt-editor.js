@@ -3,7 +3,7 @@
  * epics…) and tasks defined by a start rule and a duration. Concrete dates are
  * computed by scheduleGantt() and shown under each task.
  */
-import { TASK_TYPES, STATUSES, LOOKS, END_DATE_MODES, END_DATE_FORMATS, showsEndDate, AXIS_PRESETS, TICK_UNITS, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
+import { TASK_TYPES, STATUSES, LOOKS, END_DATE_MODES, END_DATE_FORMATS, showsEndDate, AXIS_PRESETS, TICK_UNITS, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI, cleanWidthRange, AUTO_WIDTH, WIDTH_LIMITS } from './gantt.js';
 import { themeVars, rowColour, themeColour } from './themes.js';
 import { sortable, moveBetween } from './drag.js';
 import { formatDate, isoDate, nextName } from './generator.js';
@@ -244,8 +244,24 @@ export function createGanttEditor(root, api) {
         }
       </div>
       ${axisHtml()}
+      ${widthHtml()}
       ${rowsHtml()}
     </div>`;
+  }
+
+  /** Chart width range in px (empty = automatic, min = max = fixed width). */
+  function widthHtml() {
+    const { minWidth, maxWidth } = g();
+    const field = (key, value, auto, label) =>
+      `<input type="number" data-gwidth="${key}" min="${WIDTH_LIMITS.min}" max="${WIDTH_LIMITS.max}" step="10"
+        value="${value || ''}" placeholder="${auto}" aria-label="${label}" title="${label} in px (empty = automatic)" />`;
+    return `<div class="grows gwidth" title="Chart width in pixels. Same value twice = fixed width.">
+        <span class="muted small">Width</span>
+        ${field('min', minWidth, AUTO_WIDTH.min, 'Minimum width')}
+        <span class="muted small">–</span>
+        ${field('max', maxWidth, AUTO_WIDTH.max, 'Maximum width')}
+        <span class="muted small">px</span>
+      </div>`;
   }
 
   let axisCustom = false; // "Custom…" chosen, even while the values still match a preset
@@ -281,7 +297,7 @@ export function createGanttEditor(root, api) {
   function focusKey() {
     const el = document.activeElement;
     if (!el || !root.contains(el)) return null;
-    const attr = ['gpfield', 'gfield', 'gcal', 'gaction', 'gaxis'].find((k) => el.dataset[k]);
+    const attr = ['gpfield', 'gfield', 'gcal', 'gaction', 'gaxis', 'gwidth'].find((k) => el.dataset[k]);
     const field = attr ? `[data-${attr}="${el.dataset[attr]}"]` : null;
     if (!field) return null;
     const scope = ['pi', 'sp', 'gs', 'gt']
@@ -542,6 +558,13 @@ export function createGanttEditor(root, api) {
       api.change(() => {
         if (which === 'format') g().axisFormat = el.value.replace(/[#;]/g, '').trim();
         else g().tickInterval = unit ? `${n}${unit}` : '';
+      });
+      return;
+    }
+    if (el.dataset.gwidth) {
+      api.change(() => {
+        g()[el.dataset.gwidth === 'min' ? 'minWidth' : 'maxWidth'] = Number(el.value) || 0;
+        Object.assign(g(), cleanWidthRange(g().minWidth, g().maxWidth));
       });
       return;
     }

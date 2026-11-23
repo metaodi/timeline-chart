@@ -14,6 +14,8 @@
  *   endDateFormat: 'dmy' | 'iso',
  *   axisFormat: string,   // time axis labels (Mermaid axisFormat, strftime: "%m.%Y"); '' = "%d %b"
  *   tickInterval: string, // ticks + grid lines ("1month", "2week", "3day"); '' = one per sprint (or Pele's choice)
+ *   minWidth: number,     // chart width range in px (Mermaid useWidth); 0 = automatic (1000 / 4000)
+ *   maxWidth: number,     //   min = max: fixed width. A range also stops the preview from widening the chart.
  *   sections: [{ name, color, tasks: Task[] }],   // color: 0 = automatic, 1..8 = theme colour
  * }
  * Task = {
@@ -90,6 +92,19 @@ const isTick = (t) => new RegExp(`^[1-9]\\d{0,2}(${TICK_UNITS.join('|')})$`).tes
 export const cleanAxisFormat = (f) => String(f ?? '').replace(/[#;\r\n]/g, '').trim().slice(0, 40);
 const LOOKS_KEY = 'task-looks';
 const END_DATES_KEY = 'end-dates';
+const WIDTH_KEY = 'chart-width';
+/** Automatic chart width range and the limits a user may set (px). */
+export const AUTO_WIDTH = { min: 1000, max: 4000 };
+export const WIDTH_LIMITS = { min: 300, max: 10000 };
+const cleanWidth = (w) => {
+  const n = Math.round(Number(w));
+  return Number.isFinite(n) && n > 0 ? Math.max(WIDTH_LIMITS.min, Math.min(WIDTH_LIMITS.max, n)) : 0;
+};
+/** `{ minWidth, maxWidth }` within the limits (0 = automatic), swapped if min > max. */
+export function cleanWidthRange(min, max) {
+  const [a, b] = [cleanWidth(min), cleanWidth(max)];
+  return a && b && a > b ? { minWidth: b, maxWidth: a } : { minWidth: a, maxWidth: b };
+}
 const END_DATE_TASKS_KEY = 'end-date-tasks';
 const CAL_KEY = 'sprint-calendar';
 const PLAN_KEY = 'sprint-plan';
@@ -121,6 +136,8 @@ export function emptyGantt() {
     endDateFormat: 'dmy', // see END_DATE_FORMATS
     axisFormat: '', // '' = DEFAULT_AXIS_FORMAT
     tickInterval: '', // '' = automatic
+    minWidth: 0, // chart width range in px; 0 = automatic
+    maxWidth: 0,
     sections: [],
   };
 }
@@ -196,6 +213,7 @@ export function normalizeGantt(g) {
   d.axisFormat = cleanAxisFormat(d.axisFormat);
   if (d.axisFormat === DEFAULT_AXIS_FORMAT) d.axisFormat = '';
   d.tickInterval = isTick(d.tickInterval) ? d.tickInterval : '';
+  Object.assign(d, cleanWidthRange(d.minWidth, d.maxWidth));
   d.rows = [0, 1].map((i) => (isRowToken(d.rows?.[i]) ? d.rows[i].toLowerCase() : ROW_PRESETS.standard.rows[i]));
   d.pis = Array.isArray(d.pis) ? normalizePlan(d.pis) : sprintPlanFromConfig(d.calendar);
   // every sprint needs a unique id (tasks reference them)
@@ -391,21 +409,34 @@ export function milestoneSpan(name, pxPerDay) {
   return Math.max(1, Math.min(90, Math.ceil(px / Math.max(pxPerDay, 0.1))));
 }
 /**
- * Chart width (Mermaid `useWidth`): about 40px per week, so long plans get wider
- * instead of cramped. Between 1000 and 4000px.
+ * The chart's width range in px: the user's min / max (`g.minWidth`, `g.maxWidth`),
+ * else 1000 – 4000. `custom`: the user set at least one bound.
  */
-export function ganttWidth(cal, dates) {
-  return ganttScale(cal, dates).width;
+export function widthRange(g) {
+  const min = cleanWidth(g?.minWidth);
+  const max = cleanWidth(g?.maxWidth);
+  const hi = max || Math.max(AUTO_WIDTH.max, min);
+  const lo = Math.min(min || AUTO_WIDTH.min, hi);
+  return { min: lo, max: hi, custom: Boolean(min || max) };
+}
+
+/**
+ * Chart width (Mermaid `useWidth`): about 40px per week, so long plans get wider
+ * instead of cramped. Within `widthRange(g)` (default 1000 – 4000px).
+ */
+export function ganttWidth(cal, dates, g) {
+  return ganttScale(cal, dates, g).width;
 }
 
 /** Chart width and its approximate scale (pixels per day on the time axis). */
-export function ganttScale(cal, dates) {
+export function ganttScale(cal, dates, g) {
+  const range = widthRange(g);
   const all = [...cal.sprints, ...dates.flat().filter(Boolean)];
-  if (!all.length) return { width: 1000, pxPerDay: 10 };
+  if (!all.length) return { width: Math.max(range.min, Math.min(range.max, 1000)), pxPerDay: 10 };
   const start = Math.min(...all.map((d) => d.start.getTime()));
   const end = Math.max(...all.map((d) => d.end.getTime()));
   const days = (end - start) / 864e5 + 1;
-  const width = Math.max(1000, Math.min(4000, Math.round((260 + (days / 7) * 40) / 10) * 10));
+  const width = Math.max(range.min, Math.min(range.max, Math.round((260 + (days / 7) * 40) / 10) * 10));
   // ~180px for section names and padding; start/end bound the time axis
   return { width, pxPerDay: (width - 180) / days, start, end };
 }
@@ -416,7 +447,7 @@ export function toGanttMermaid(t, frontmatter = []) {
   const fm = [...frontmatter];
   const at = fm.indexOf('  gantt:');
   const compact = g.layout !== 'ordered';
-  const scale = ganttScale(cal, dates);
+  const scale = ganttScale(cal, dates, g);
   if (at >= 0) fm.splice(at + (compact ? 2 : 1), 0, `    useWidth: ${scale.width}`);
   const out = [...fm, 'gantt'];
   if (t.title?.trim()) out.push(`  title ${t.title.replace(/\s*\n\s*/g, ' ').trim()}`);
@@ -456,6 +487,8 @@ export function toGanttMermaid(t, frontmatter = []) {
   const looks = {};
   g.sections.forEach((s, si) => s.tasks.forEach((t, ti) => t.look && t.type === 'task' && (looks[`g${si}t${ti}`] = t.look)));
   if (Object.keys(looks).length) out.push(`  %% ${LOOKS_KEY} ${JSON.stringify(looks)}`);
+  const { minWidth, maxWidth } = cleanWidthRange(g.minWidth, g.maxWidth);
+  if (minWidth || maxWidth) out.push(`  %% ${WIDTH_KEY} ${minWidth || 'auto'} ${maxWidth || 'auto'}`);
   if (g.endDates) out.push(`  %% ${END_DATES_KEY} ${g.endDates} ${g.endDateFormat || 'dmy'}`);
   const endDateTasks = {};
   g.sections.forEach((s, si) => s.tasks.forEach((t, ti) => ['show', 'hide'].includes(t.endDate) && t.type !== 'deadline' && (endDateTasks[`g${si}t${ti}`] = t.endDate)));
@@ -580,6 +613,9 @@ export function parseGanttMermaid(code) {
           } catch {
             res.warnings.push(`Line ${i + 1}: could not read the end dates of the tasks`);
           }
+        } else if (line.startsWith(`%% ${WIDTH_KEY} `)) {
+          const [min, max] = line.slice(`%% ${WIDTH_KEY} `.length).trim().split(/\s+/);
+          Object.assign(g, cleanWidthRange(min, max));
         } else if (line.startsWith(`%% ${END_DATES_KEY} `)) {
           for (const w of line.slice(`%% ${END_DATES_KEY} `.length).trim().split(/\s+/)) {
             if (END_DATE_MODES.some((x) => x.id && x.id === w)) g.endDates = w;

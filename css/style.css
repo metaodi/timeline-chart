@@ -275,6 +275,9 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
 .grows select { min-height: 30px; padding: 2px 6px; font-size: 0.85rem; }
 .gaxis input[type='text'] { width: 9em; min-height: 30px; padding: 2px 6px; font: inherit; font-size: 0.85rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .gaxis input[type='number'] { width: 4.5em; min-height: 30px; padding: 2px 6px; font: inherit; font-size: 0.85rem; }
+.gwidth input[type='number'] { width: 6em; min-height: 30px; padding: 2px 6px; font: inherit; font-size: 0.85rem; }
+#png-size { min-height: 30px; padding: 2px 6px; font-size: 0.85rem; }
+#png-width { width: 6em; min-height: 30px; padding: 2px 6px; font: inherit; font-size: 0.85rem; }
 .grows input[type='color'] {
   width: 34px; height: 28px; padding: 2px; cursor: pointer;
   border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
@@ -444,7 +447,8 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
   .gsprints { padding-left: 0; }
   .gpi input, .gsprint .weeks input { font-size: 16px; }
   .gtask-when select, .gtask-when input { font-size: 16px; min-height: 36px; }
-  .grows select, .gaxis input[type='text'], .gaxis input[type='number'] { font-size: 16px; min-height: 36px; }
+  .grows select, .gaxis input[type='text'], .gaxis input[type='number'], .gwidth input[type='number'],
+  #png-size, #png-width { font-size: 16px; min-height: 36px; }
 
   .tabbar {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;

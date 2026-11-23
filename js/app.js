@@ -10,12 +10,12 @@ import { peleCss } from './pele-css.js';
 import { alignTitle } from './svg-title.js';
 import { addNotes } from './gantt-notes.js';
 import { collapseCalendarRows } from './gantt-collapse.js';
-import { emptyGantt, newGanttSection } from './gantt.js';
+import { emptyGantt, newGanttSection, widthRange } from './gantt.js';
 import { toMermaid, normalize, isEmpty, newPeriod, newSection, THEMES, KINDS, getKind, stripKind, setKind } from './model.js';
 import { parseMermaid } from './parser.js';
 import { generateSprints, sprintPlanFromConfig } from './generator.js';
 import { EXAMPLES, DEFAULT_EXAMPLE, GANTT_EXAMPLE, nextMonday as nextMondayIso } from './examples.js';
-import { downloadSvg, downloadPng, copyText } from './export.js';
+import { downloadSvg, downloadPng, copyText, PNG_SIZES, cleanPngSize } from './export.js';
 import { PRESETS, themeVars, applyVars } from './themes.js';
 import { loadLocal, saveLocal, encodeShare, decodeShare } from './storage.js';
 import { isPng, stateFromPng, stateFromSvg } from './embed.js';
@@ -304,8 +304,20 @@ function renderSettings() {
   $$('input[name="direction"]').forEach((r) => (r.checked = r.value === state.direction));
   $('#theme').value = state.theme;
   $('#multicolor').checked = !state.disableMulticolor;
+  renderPngSize();
   $('#accTitle').value = state.accTitle;
   $('#accDescr').value = state.accDescr;
+}
+
+/** "2x" → "2×", "1920px" → "1920 px wide". */
+const pngSizeLabel = (v) => (v.endsWith('x') ? `${v.slice(0, -1)}×` : `${v.slice(0, -2)} px wide`);
+
+/** PNG size picker: a preset, or "Other width…" with a number field. */
+function renderPngSize() {
+  const preset = PNG_SIZES.includes(state.pngSize);
+  $('#png-size').value = preset ? state.pngSize : 'custom';
+  $('#png-width').hidden = preset;
+  $('#png-width').value = preset ? '' : parseInt(state.pngSize, 10);
 }
 
 function bindSettings() {
@@ -345,6 +357,29 @@ function bindSettings() {
     snapshot();
     state.titleAlign = ev.target.checked ? 'left' : 'center';
     update();
+  });
+  $('#png-size').innerHTML = [
+    ...PNG_SIZES.map((v) => `<option value="${v}">${pngSizeLabel(v)}</option>`),
+    '<option value="custom">Other width…</option>',
+  ].join('');
+  $('#png-size').addEventListener('change', (ev) => {
+    if (ev.target.value === 'custom') {
+      $('#png-width').hidden = false;
+      $('#png-width').focus();
+      return;
+    }
+    snapshot();
+    state.pngSize = ev.target.value;
+    renderPngSize();
+    saveLocal(state);
+  });
+  $('#png-width').addEventListener('change', (ev) => {
+    const size = cleanPngSize(`${Math.round(Number(ev.target.value))}px`);
+    if (!size) return renderPngSize();
+    snapshot();
+    state.pngSize = size;
+    renderPngSize();
+    saveLocal(state);
   });
   $('#multicolor').addEventListener('change', (ev) => {
     snapshot();
@@ -388,7 +423,7 @@ function previewOptions() {
     autoDirection: state.mode === 'timeline' && $('#responsive').checked,
     // Gantt: always lay out at the chart's own width (useWidth in the code). On
     // desktop it scrolls horizontally, on phones it scales down (zoom for details).
-    ...(state.mode === 'gantt' ? { maxWidth: 4000 } : {}),
+    ...(state.mode === 'gantt' ? { maxWidth: widthRange(state.gantt).max } : {}),
     zoom: 'auto',
     onError: showError,
     // Runs after every (re-)layout, including resizes.
@@ -444,11 +479,15 @@ function renderPreview() {
 let lastPreview = { code: '', titleAlign: 'center' };
 const withoutComments = (code) => code.replace(/^\s*%%.*\n/gm, '');
 
-/** On desktop a Gantt chart fills at least the preview width (e.g. in the wide view). */
+/**
+ * On desktop a Gantt chart fills at least the preview width (e.g. in the wide view),
+ * up to the chart's maximum width (Width setting; min = max fixes the width).
+ */
 function previewCode() {
   if (state.mode !== 'gantt' || matchMedia('(max-width: 720px)').matches) return currentCode;
   const available = $('#preview').clientWidth - 34;
-  return currentCode.replace(/useWidth: (\d+)/, (_, w) => `useWidth: ${Math.max(Number(w), available)}`);
+  const { max } = widthRange(state.gantt);
+  return currentCode.replace(/useWidth: (\d+)/, (_, w) => `useWidth: ${Math.max(Number(w), Math.min(available, max))}`);
 }
 
 /**
@@ -747,7 +786,7 @@ function bindToolbar() {
     const out = exportSvg();
     if (!out) return;
     try {
-      await downloadPng(out.el, state.title, out.background, state);
+      await downloadPng(out.el, state.title, out.background, state, state.pngSize);
     } catch (err) {
       toast(err.message);
     }
