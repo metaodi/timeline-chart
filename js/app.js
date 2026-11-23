@@ -426,8 +426,12 @@ function renderPreview() {
   if (!mounted) {
     preview.innerHTML = '';
     mounted = mount(preview, code, previewOptions());
-  } else if (code === lastPreview.code && state.titleAlign !== lastPreview.titleAlign) {
-    // Only the title alignment changed (not part of the code): mount again from scratch.
+  } else if (
+    (code === lastPreview.code && state.titleAlign !== lastPreview.titleAlign) ||
+    (code !== lastPreview.code && withoutComments(code) === withoutComments(lastPreview.code))
+  ) {
+    // Only our post-processing changed – the title alignment (not part of the code) or `%%` comments
+    // (bar looks, end dates, notes …): Pele may skip such an update, so mount again from scratch.
     mounted.destroy();
     preview.innerHTML = '';
     mounted = mount(preview, code, previewOptions());
@@ -437,6 +441,7 @@ function renderPreview() {
   lastPreview = { code, titleAlign: state.titleAlign };
 }
 let lastPreview = { code: '', titleAlign: 'center' };
+const withoutComments = (code) => code.replace(/^\s*%%.*\n/gm, '');
 
 /** On desktop a Gantt chart fills at least the preview width (e.g. in the wide view). */
 function previewCode() {

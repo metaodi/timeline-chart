@@ -65,12 +65,14 @@ included). On phones both use the code's own width.
   calendar, then edited freely. A PI with an empty name = sprints without PI. Dates follow from `calendar.startDate`
   and the sprint lengths.
 - `sections: [{name, color, tasks}]`; task = `{id, name, type: task|milestone|deadline, status, from, duration, to,
-  note, link, look}` – `look`: `''` | `hatch` | `option` (bars only, drawn by `gantt-style.js`).
+  note, link, look, endDate}` – `look`: `''` | `hatch` | `option` (bars only, drawn by `gantt-style.js`); `endDate`:
+  `''` | `show` | `hide` overrides the chart's `endDates` for this entry (`showsEndDate()`).
   - `from`: `prev` | `plan` | `after:<taskId>` | sprint id `sN` | `YYYY-MM-DD`
   - `duration`: `Ns` sprints / `Nw` weeks / `Nd` working days, or `''` = until `to` (sprint id or date)
   - milestones/deadlines: position in `from` (sprint → its end)
 - `layout` (`compact` | `ordered`), `rows` (stripe tokens), `showPIs`, `showSprints`, `showNotes`, `endDates`
-  (`''` | `dmy` | `iso`: dot + date after bars/milestones; the chart's viewBox grows on the right to fit).
+  (`''` | `all` | `some`: dot + date after bars/milestones; the chart's viewBox grows on the right to fit),
+  `endDateFormat` (`dmy` | `iso`).
   `axisFormat` (strftime, `''` = `%d %b`) and `tickInterval` (`Nday|Nweek|Nmonth`, `''` = one per sprint): written as
   Mermaid `axisFormat` / `tickInterval`; on import a tick equal to the sprint length becomes `''` again.
 - Task `id` (`t…`) is stable (for `after:` refs). **In the Mermaid code** tasks are `g<section>t<index>`, sprints `sN`,
@@ -80,7 +82,7 @@ included). On phones both use the code's own width.
 
 Concrete dates only (Mermaid can't express our scheduling). Everything Mermaid can't hold goes into `%%` comments
 that the importer reads back: `%% sprint-calendar …`, `%% sprint-plan [json]`, `%% section-colours …`,
-`%% row-colours …`, `%% notes {json}`, `%% task-looks {json}`, `%% end-dates …`. App-only themes (e.g. `ebp`)
+`%% row-colours …`, `%% notes {json}`, `%% task-looks {json}`, `%% end-dates <mode> <format>`, `%% end-date-tasks {json}`. App-only themes (e.g. `ebp`)
 write the closest Mermaid theme plus a YAML comment `# timeline-builder theme: …` in the frontmatter. Links use standard `click <id> href "…"`. Layout = presence of
 `displayMode: compact` in the frontmatter; `useWidth` sets the chart width. Durations/`after` rules come back as
 fixed sprints/dates on import (share links, autosave and exported PNG/SVG files keep the full state).
@@ -94,6 +96,8 @@ so older files still load.
 
 ## Pele facts learned the hard way
 
+- `mounted.update()` may skip re-rendering when only `%%` comments change (seen on phones, preview hidden) → the
+  preview mounts again when the code differs only in comments (`renderPreview`).
 - Pinned to `pele@1.13.0` from jsDelivr (`core.js` + only `diagrams/timeline.js` and `diagrams/gantt.js`).
 - Themed **only by CSS variables** (`--pele-bg`, `--pele-fg`, `--pele-series-1..8`, …); it ignores Mermaid `theme` and
   `disableMulticolor`. All gantt bars use the accent colour → we recolour in `gantt-style.js`.

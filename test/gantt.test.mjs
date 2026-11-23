@@ -216,16 +216,17 @@ test('bar looks and end dates: written as comments, restored on import', async (
   const state = {
     mode: 'gantt',
     gantt: {
-      endDates: 'dmy',
+      endDates: 'dmy', // first version: the format alone meant "all"
       sections: [{ name: 'Work', tasks: [t('A', 'hatch'), t('B', 'option'), t('C', ''), { name: 'M', type: 'milestone', from: '2026-10-01', look: 'hatch' }] }],
     },
   };
   const code = toMermaid(state);
   assert.match(code, /%% task-looks \{"g0t0":"hatch","g0t1":"option"\}\n/); // not for milestones
-  assert.match(code, /%% end-dates dmy\n/);
+  assert.match(code, /%% end-dates all dmy\n/);
   const g = parseMermaid(code).timeline.gantt;
   assert.deepEqual(g.sections[0].tasks.map((x) => x.look), ['hatch', 'option', '', '']);
-  assert.equal(g.endDates, 'dmy');
+  assert.equal(g.endDates, 'all');
+  assert.equal(g.endDateFormat, 'dmy');
   // nothing written by default, unknown values dropped
   assert.doesNotMatch(toMermaid({ mode: 'gantt', gantt: { sections: [{ name: 'W', tasks: [t('A', '')] }] } }), /task-looks|end-dates/);
   const n = normalize({ mode: 'gantt', gantt: { endDates: 'xyz', sections: [{ name: 'W', tasks: [t('A', 'zigzag')] }] } });
@@ -243,7 +244,7 @@ test('EBP example: EBP theme, end dates, hatched and dashed bars, round trip', a
   const { EXAMPLES } = await import('../js/examples.js');
   const state = normalize(EXAMPLES['Gantt: EBP project']());
   assert.equal(state.theme, 'ebp');
-  assert.equal(state.gantt.endDates, 'dmy');
+  assert.equal(state.gantt.endDates, 'all');
   const looks = state.gantt.sections.flatMap((s) => s.tasks.map((t) => t.look)).filter(Boolean);
   assert.deepEqual(looks, ['hatch', 'option']);
   const back = parseMermaid(toMermaid(state)).timeline;
@@ -299,3 +300,24 @@ test('time axis: free label format and tick interval, written as Mermaid and rea
 function pick(g) {
   return [g.axisFormat, g.tickInterval];
 }
+
+test('end dates per task: all entries with exceptions, or only chosen entries', async () => {
+  const { showsEndDate } = await import('../js/gantt.js');
+  const t = (name, endDate, type = 'task') => ({ name, type, from: '2026-10-15', duration: '', to: type === 'task' ? '2026-11-09' : '', endDate });
+  const tasks = [t('A', ''), t('B', 'hide'), t('C', 'show'), t('M', '', 'milestone'), t('D', 'show', 'deadline')];
+  const plan = (endDates, endDateFormat) => normalize({ mode: 'gantt', gantt: { endDates, endDateFormat, sections: [{ name: 'W', tasks }] } }).gantt;
+  const shown = (g) => g.sections[0].tasks.map((x) => showsEndDate(g, x));
+  assert.deepEqual(shown(plan('all')), [true, false, true, true, false]);
+  assert.deepEqual(shown(plan('some')), [false, false, true, false, false]);
+  assert.deepEqual(shown(plan('')), [false, false, false, false, false]);
+  // round trip: mode, format and the per-task choices (not for deadlines)
+  const code = toMermaid({ mode: 'gantt', gantt: plan('some', 'iso') });
+  assert.match(code, /%% end-dates some iso\n  %% end-date-tasks \{"g0t1":"hide","g0t2":"show"\}\n/);
+  const back = parseMermaid(code).timeline.gantt;
+  assert.deepEqual([back.endDates, back.endDateFormat], ['some', 'iso']);
+  assert.deepEqual(back.sections[0].tasks.map((x) => x.endDate), ['', 'hide', 'show', '', '']);
+  // older code "%% end-dates dmy" = all entries
+  assert.equal(parseMermaid('gantt\n  %% end-dates dmy\n  section W\n    A : 2026-01-05, 2026-01-09\n').timeline.gantt.endDates, 'all');
+  assert.equal(plan('weird', 'xx').endDateFormat, 'dmy');
+  assert.equal(plan('weird').endDates, '');
+});

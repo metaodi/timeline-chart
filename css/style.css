@@ -483,6 +483,7 @@ body.dragging .gtasks:empty, body.dragging .periods:empty, body.dragging .events
 .gnote:focus { border-style: solid; border-color: var(--accent); outline: none; }
 .glink { display: block; color: var(--accent); }
 .ibtn.has-note { opacity: 1; color: var(--accent); }
+.ibtn.off { opacity: 0.4; filter: grayscale(1); } /* e.g. end date hidden for this entry */
 @media (max-width: 720px) {
   .gnote { margin-left: 4px; width: calc(100% - 4px); font-size: 16px; }
 }

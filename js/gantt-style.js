@@ -9,7 +9,7 @@
  * Works on the DOM of a rendered SVG (preview or export). Task ids come from
  * gantt.js: "pi1", "s3" (sprints) and "g0t2" (section 0, task 2).
  */
-import { calendarOf, sectionColour, scheduleGantt, formatEndDate } from './gantt.js';
+import { calendarOf, sectionColour, scheduleGantt, formatEndDate, showsEndDate } from './gantt.js';
 import { themeVars, rowColour, themeColour, mixHex } from './themes.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -90,7 +90,7 @@ export function styleGantt(svg, state) {
   const vars = themeVars(state.theme);
   const tasks = [...svg.querySelectorAll('g.pele-task[data-id]')];
   const { dates } = scheduleGantt(state.gantt);
-  const endFormat = state.gantt.endDates;
+  const endFormat = state.gantt.endDates ? state.gantt.endDateFormat || 'dmy' : '';
   let maxRight = 0; // right edge of the end dates (the chart grows to fit them)
   const taskOf = (id) => {
     const m = /^g(\d+)t(\d+)$/.exec(id);
@@ -158,7 +158,7 @@ export function styleGantt(svg, state) {
     }
     if (!label) continue;
     const size = Number(label.closest('[font-size]')?.getAttribute('font-size')) || 13;
-    const dateText = endFormat && task && task.type !== 'deadline' ? formatEndDate(when?.end, endFormat) : '';
+    const dateText = showsEndDate(state.gantt, task) ? formatEndDate(when?.end, endFormat) : '';
     const dateWidth = dateText.length * size * CHAR_WIDTH; // estimate, measured once drawn
 
     if (!rect) {
