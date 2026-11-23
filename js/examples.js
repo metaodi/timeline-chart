@@ -72,6 +72,8 @@ export function ebpExample() {
       layout: 'ordered',
       rows: ['none', 'none'],
       endDates: 'dmy',
+      axisFormat: '%m.%Y',
+      tickInterval: '1month',
       sections: [
         { name: 'Start', color: 4, tasks: [point('start', 'Mandatsbeginn', '2026-10-01')] },
         {
@@ -124,6 +126,7 @@ export function ebpOfferExample() {
       layout: 'ordered',
       rows: ['none', 'none'],
       endDates: 'dmy',
+      axisFormat: '%d.%m.%Y',
       sections: [
         {
           name: '1 Konzeption und Machbarkeit',

@@ -71,6 +71,8 @@ included). On phones both use the code's own width.
   - milestones/deadlines: position in `from` (sprint → its end)
 - `layout` (`compact` | `ordered`), `rows` (stripe tokens), `showPIs`, `showSprints`, `showNotes`, `endDates`
   (`''` | `dmy` | `iso`: dot + date after bars/milestones; the chart's viewBox grows on the right to fit).
+  `axisFormat` (strftime, `''` = `%d %b`) and `tickInterval` (`Nday|Nweek|Nmonth`, `''` = one per sprint): written as
+  Mermaid `axisFormat` / `tickInterval`; on import a tick equal to the sprint length becomes `''` again.
 - Task `id` (`t…`) is stable (for `after:` refs). **In the Mermaid code** tasks are `g<section>t<index>`, sprints `sN`,
   PIs `piN` – styling, notes, links and the playground CSS address elements by these `data-id`s.
 

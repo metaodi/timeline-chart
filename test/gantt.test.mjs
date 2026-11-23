@@ -273,3 +273,29 @@ test('plural row labels for PI / sprint prefixes', async () => {
     ['Sprints', 'PIs', 'Steps', 'Schritte', 'Phasen', 'Arbeitspakete', 'Iterations']);
   assert.match(toMermaid(normalize((await import('../js/examples.js')).EXAMPLES['Gantt: EBP offer (steps)']())), /section Schritte\n/);
 });
+
+test('time axis: free label format and tick interval, written as Mermaid and read back', () => {
+  const plan = (g) => ({ mode: 'gantt', gantt: { calendar: { ...calendar }, sections: [{ name: 'W', tasks: [{ name: 'A', type: 'task', from: 'plan', duration: '2s' }] }], ...g } });
+  // months with a monthly grid
+  const month = toMermaid(plan({ axisFormat: '%m.%Y', tickInterval: '1month' }));
+  assert.match(month, /axisFormat %m\.%Y\n  tickInterval 1month\n/);
+  assert.doesNotMatch(month, /2week|weekday/);
+  assert.deepEqual(pick(parseMermaid(month).timeline.gantt), ['%m.%Y', '1month']);
+  // custom: week numbers every 3 weeks
+  const weeks = toMermaid(plan({ axisFormat: 'KW %V', tickInterval: '3week' }));
+  assert.match(weeks, /axisFormat KW %V\n  tickInterval 3week\n  weekday monday\n/);
+  assert.deepEqual(pick(parseMermaid(weeks).timeline.gantt), ['KW %V', '3week']);
+  // automatic: default format, one tick per sprint – and that stays automatic on import
+  const auto = toMermaid(plan({}));
+  assert.match(auto, /axisFormat %d %b\n  tickInterval 2week\n/);
+  assert.deepEqual(pick(parseMermaid(auto).timeline.gantt), ['', '']);
+  // without sprints: no tick interval (Pele chooses)
+  assert.doesNotMatch(toMermaid(plan({ calendar: { startDate: '' } })), /tickInterval/);
+  // characters that would break the grammar are dropped, unknown intervals ignored
+  assert.deepEqual(pick(normalize(plan({ axisFormat: '%d#%m;\nx', tickInterval: '2years' })).gantt), ['%d%mx', '']);
+  assert.deepEqual(pick(normalize(plan({ axisFormat: '%d %b', tickInterval: '0week' })).gantt), ['', '']);
+});
+
+function pick(g) {
+  return [g.axisFormat, g.tickInterval];
+}

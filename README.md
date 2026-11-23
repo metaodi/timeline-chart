@@ -65,6 +65,10 @@ data.
   (`31.03.2027` or `2027-03-31`), and the date next to every milestone. The chart grows on the right to fit them.
   See the examples *Gantt: EBP project* and *Gantt: EBP offer (steps)* (the steps of an offer as "sprints" of
   different lengths with the prefix *Schritt*, the positions of the effort estimate as sections).
+- **Time axis** (*Axis* next to the plan start): presets *05 Jan* (one tick per sprint), *by month 01.2027* (a grid
+  line per month) and *05.01.2027*, or *Custom…*: any label format (Mermaid `axisFormat`, strftime: `%d` day, `%m`
+  month, `%Y` year, `%b` Jan, `%V` week number, e.g. `KW %V`) and a tick interval in days, weeks or months (or
+  automatic: one per sprint). Both are standard Mermaid (`axisFormat`, `tickInterval`) and come back on import.
 - Change a duration or the plan start and everything that follows moves with it.
 - **Row stripes**: the alternating row colours are configurable next to the plan start – *Standard* (grey / none),
   *Subtle grey* (grey / a lighter grey mixed from the theme), *No stripes*, or two custom colours.

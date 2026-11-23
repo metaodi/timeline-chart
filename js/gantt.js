@@ -11,6 +11,8 @@
  *   excludeWeekends: boolean,
  *   todayMarker: boolean,
  *   endDates: '' | 'dmy' | 'iso', // end date (with a dot) after bars and milestones
+ *   axisFormat: string,   // time axis labels (Mermaid axisFormat, strftime: "%m.%Y"); '' = "%d %b"
+ *   tickInterval: string, // ticks + grid lines ("1month", "2week", "3day"); '' = one per sprint (or Pele's choice)
  *   sections: [{ name, color, tasks: Task[] }],   // color: 0 = automatic, 1..8 = theme colour
  * }
  * Task = {
@@ -60,6 +62,19 @@ export const END_DATE_FORMATS = [
   { id: 'dmy', label: 'End dates 31.03.2027' },
   { id: 'iso', label: 'End dates 2027-03-31' },
 ];
+/** Default label format of the time axis. */
+export const DEFAULT_AXIS_FORMAT = '%d %b';
+/** Presets for the time axis: label format (Mermaid `axisFormat`, strftime) and tick interval ('' = automatic). */
+export const AXIS_PRESETS = [
+  { id: 'auto', label: 'Axis 05 Jan', format: '', tick: '' },
+  { id: 'month', label: 'Axis by month 01.2027', format: '%m.%Y', tick: '1month' },
+  { id: 'dmy', label: 'Axis 05.01.2027', format: '%d.%m.%Y', tick: '' },
+];
+/** Units of a custom tick interval (as Pele/Mermaid spell them). */
+export const TICK_UNITS = ['day', 'week', 'month'];
+const isTick = (t) => new RegExp(`^[1-9]\\d{0,2}(${TICK_UNITS.join('|')})$`).test(t ?? '');
+/** An axis format the grammar can hold (no line breaks, "#" or ";"). */
+export const cleanAxisFormat = (f) => String(f ?? '').replace(/[#;\r\n]/g, '').trim().slice(0, 40);
 const LOOKS_KEY = 'task-looks';
 const END_DATES_KEY = 'end-dates';
 const CAL_KEY = 'sprint-calendar';
@@ -89,6 +104,8 @@ export function emptyGantt() {
     excludeWeekends: false, // kept for imported charts; no UI (clean look)
     todayMarker: false,
     endDates: '', // see END_DATE_FORMATS
+    axisFormat: '', // '' = DEFAULT_AXIS_FORMAT
+    tickInterval: '', // '' = automatic
     sections: [],
   };
 }
@@ -158,6 +175,9 @@ export function normalizeGantt(g) {
   d.showNotes = d.showNotes !== false;
   d.layout = d.layout === 'ordered' ? 'ordered' : 'compact';
   d.endDates = END_DATE_FORMATS.some((f) => f.id === d.endDates) ? d.endDates : '';
+  d.axisFormat = cleanAxisFormat(d.axisFormat);
+  if (d.axisFormat === DEFAULT_AXIS_FORMAT) d.axisFormat = '';
+  d.tickInterval = isTick(d.tickInterval) ? d.tickInterval : '';
   d.rows = [0, 1].map((i) => (isRowToken(d.rows?.[i]) ? d.rows[i].toLowerCase() : ROW_PRESETS.standard.rows[i]));
   d.pis = Array.isArray(d.pis) ? normalizePlan(d.pis) : sprintPlanFromConfig(d.calendar);
   // every sprint needs a unique id (tasks reference them)
@@ -383,8 +403,11 @@ export function toGanttMermaid(t, frontmatter = []) {
   if (t.title?.trim()) out.push(`  title ${t.title.replace(/\s*\n\s*/g, ' ').trim()}`);
   if (t.accTitle?.trim()) out.push(`  accTitle: ${t.accTitle.trim()}`);
   if (t.accDescr?.trim()) out.push(`  accDescr: ${t.accDescr.replace(/\s*\n\s*/g, ' ').trim()}`);
-  out.push('  dateFormat YYYY-MM-DD', '  axisFormat %d %b');
-  if (cal.sprints.length) out.push(`  tickInterval ${g.calendar.sprintWeeks}week`, '  weekday monday');
+  out.push('  dateFormat YYYY-MM-DD', `  axisFormat ${cleanAxisFormat(g.axisFormat) || DEFAULT_AXIS_FORMAT}`);
+  // ticks (and grid lines): as chosen, or one per sprint
+  const tick = isTick(g.tickInterval) ? g.tickInterval : cal.sprints.length ? `${g.calendar.sprintWeeks}week` : '';
+  if (tick) out.push(`  tickInterval ${tick}`);
+  if (tick.endsWith('week')) out.push('  weekday monday');
   if (g.excludeWeekends) out.push('  excludes weekends');
   out.push('  inclusiveEndDates');
   if (!g.todayMarker) out.push('  todayMarker off');
@@ -559,6 +582,8 @@ export function parseGanttMermaid(code) {
         if (m[1].trim() !== 'YYYY-MM-DD') res.warnings.push(`Line ${i + 1}: only dateFormat YYYY-MM-DD is supported`);
       } else if (/^excludes\s+.*weekends/i.test(line)) g.excludeWeekends = true;
       else if (/^todayMarker\s+off/i.test(line)) g.todayMarker = false;
+      else if ((m = line.match(/^axisFormat\s+(.+)$/i))) g.axisFormat = cleanAxisFormat(m[1]) === DEFAULT_AXIS_FORMAT ? '' : cleanAxisFormat(m[1]);
+      else if ((m = line.match(/^tickInterval\s+(\S+)/i))) g.tickInterval = isTick(m[1]) ? m[1] : '';
       else if ((m = line.match(/^click\s+(\S+)\s+href\s+"([^"]*)"/i))) {
         for (const id of m[1].split(',')) links[id.trim()] = m[2];
       } else if (/^(axisFormat|tickInterval|weekday|weekend|inclusiveEndDates|includes|excludes|topAxis|displayMode|click|classDef|class)\b/i.test(line)) {
@@ -635,6 +660,8 @@ export function parseGanttMermaid(code) {
     }),
   );
   snapToSprints(g);
+  // the app writes one tick per sprint by itself: keep that automatic (follows the sprint length)
+  if (calendarOf(g).sprints.length && g.tickInterval === `${g.calendar.sprintWeeks}week`) g.tickInterval = '';
   if (!seenHeader) res.warnings.unshift('No "gantt" header found');
   return res;
 }

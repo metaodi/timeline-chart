@@ -3,7 +3,7 @@
  * epics…) and tasks defined by a start rule and a duration. Concrete dates are
  * computed by scheduleGantt() and shown under each task.
  */
-import { TASK_TYPES, STATUSES, LOOKS, END_DATE_FORMATS, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
+import { TASK_TYPES, STATUSES, LOOKS, END_DATE_FORMATS, AXIS_PRESETS, TICK_UNITS, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
 import { themeVars, rowColour, themeColour } from './themes.js';
 import { sortable, moveBetween } from './drag.js';
 import { formatDate, isoDate, nextName } from './generator.js';
@@ -230,15 +230,45 @@ export function createGanttEditor(root, api) {
           ${END_DATE_FORMATS.map((f) => option(f.id, f.label, f.id === g().endDates)).join('')}
         </select>
       </div>
+      ${axisHtml()}
       ${rowsHtml()}
     </div>`;
+  }
+
+  let axisCustom = false; // "Custom…" chosen, even while the values still match a preset
+
+  /** Time axis: presets, or a custom label format (strftime) and tick interval. */
+  function axisHtml() {
+    const { axisFormat, tickInterval } = g();
+    const preset = AXIS_PRESETS.find((p) => p.format === axisFormat && p.tick === tickInterval);
+    const custom = axisCustom || !preset;
+    const m = /^(\d+)(\w+)$/.exec(tickInterval);
+    const help = 'Label format (strftime): %d day, %m month, %Y year, %y 2-digit year, %b Jan, %B January, %V week number';
+    return `<div class="grows gaxis">
+        <span class="muted small">Axis</span>
+        <select data-gaxis="preset" aria-label="Time axis">
+          ${AXIS_PRESETS.map((p) => option(p.id, p.label, !custom && p === preset)).join('')}
+          ${option('custom', 'Custom…', custom)}
+        </select>
+        ${
+          custom
+            ? `<input type="text" data-gaxis="format" value="${esc(axisFormat)}" placeholder="%d %b" title="${help}" aria-label="Axis label format" spellcheck="false" />
+        <span class="muted small">every</span>
+        <input type="number" data-gaxis="tick-n" min="1" max="999" value="${m ? m[1] : 1}" aria-label="Tick interval"${m ? '' : ' disabled'} />
+        <select data-gaxis="tick-unit" aria-label="Tick unit">
+          ${option('', g().calendar.startDate ? 'sprint (auto)' : 'auto', !m)}
+          ${TICK_UNITS.map((u) => option(u, `${u}(s)`, m?.[2] === u)).join('')}
+        </select>`
+            : ''
+        }
+      </div>`;
   }
 
   /** Selector for the focused field, so focus survives a re-render. */
   function focusKey() {
     const el = document.activeElement;
     if (!el || !root.contains(el)) return null;
-    const attr = ['gpfield', 'gfield', 'gcal', 'gaction'].find((k) => el.dataset[k]);
+    const attr = ['gpfield', 'gfield', 'gcal', 'gaction', 'gaxis'].find((k) => el.dataset[k]);
     const field = attr ? `[data-${attr}="${el.dataset[attr]}"]` : null;
     if (!field) return null;
     const scope = ['pi', 'sp', 'gs', 'gt']
@@ -475,6 +505,25 @@ export function createGanttEditor(root, api) {
     const el = ev.target;
     if (el.hasAttribute('data-glayout')) {
       api.change(() => (g().layout = el.value === 'ordered' ? 'ordered' : 'compact'));
+      return;
+    }
+    if (el.dataset.gaxis) {
+      const which = el.dataset.gaxis;
+      if (which === 'preset') {
+        const p = AXIS_PRESETS.find((x) => x.id === el.value);
+        axisCustom = !p;
+        if (p) api.change(() => Object.assign(g(), { axisFormat: p.format, tickInterval: p.tick }));
+        else render(); // just show the custom fields (prefilled with the current values)
+        return;
+      }
+      axisCustom = true;
+      const row = el.closest('.gaxis');
+      const n = Math.max(1, Math.min(999, Math.round(Number(row.querySelector('[data-gaxis="tick-n"]').value) || 1)));
+      const unit = row.querySelector('[data-gaxis="tick-unit"]').value;
+      api.change(() => {
+        if (which === 'format') g().axisFormat = el.value.replace(/[#;]/g, '').trim();
+        else g().tickInterval = unit ? `${n}${unit}` : '';
+      });
       return;
     }
     if (el.hasAttribute('data-genddates')) {
