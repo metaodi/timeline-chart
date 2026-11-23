@@ -98,7 +98,7 @@ Any static file server works; ES modules just need to be served over HTTP rather
 ```
 ---
 config:
-  theme: forest            # default | neutral | dark | forest | base
+  theme: forest            # default | neutral | dark | forest | base (app-only themes: see below)
   timeline:
     disableMulticolor: true
 ---
@@ -118,7 +118,9 @@ Themes: Pele styles diagrams with CSS variables, so the theme menu applies colou
 preview and bakes them into SVG/PNG exports. On SVG export every `var(...)` is replaced by its concrete colour and the
 background is a real rectangle (`js/svg-vars.js`), so the file looks the same in programs without CSS-variable support
 (Inkscape, Illustrator, PowerPoint, …). The matching Mermaid theme name is written into the code's frontmatter so the
-diagram looks similar in other Mermaid tools.
+diagram looks similar in other Mermaid tools. App-only themes such as **EBP** (EBP red, light red for work packages,
+blue-grey for client approvals, critical items in EBP red, square bars) write the closest Mermaid theme plus a YAML comment
+(`# timeline-builder theme: ebp`) that the importer reads back.
 
 Mermaid has no native milestone/deadline concept in timelines, so item types are stored as an emoji prefix
 (e.g. `🏁 Go-live`). That keeps them visible in the chart and lets them survive copy & import.
