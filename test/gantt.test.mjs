@@ -256,7 +256,7 @@ test('EBP offer example: steps as sprints of different lengths, durations in ste
   const { EXAMPLES } = await import('../js/examples.js');
   const state = normalize(EXAMPLES['Gantt: EBP offer (steps)']());
   const { cal, dates } = scheduleGantt(state.gantt);
-  assert.deepEqual(cal.sprints.map((s) => [s.name, s.weeks]), [['Step 1', 1], ['Step 2', 1], ['Step 3', 1], ['Step 4', 2], ['Step 5', 1]]);
+  assert.deepEqual(cal.sprints.map((s) => [s.name, s.weeks]), [['Schritt 1', 1], ['Schritt 2', 1], ['Schritt 3', 1], ['Schritt 4', 2], ['Schritt 5', 1]]);
   assert.equal(cal.pis.length, 0); // steps without a phase
   // "2nd revision" lasts one step = the two weeks of step 4
   const si = 0, ti = state.gantt.sections[0].tasks.findIndex((t) => t.id === 'ux2');
@@ -264,5 +264,12 @@ test('EBP offer example: steps as sprints of different lengths, durations in ste
   assert.equal(dates[si][ti].end.toISOString().slice(0, 10), '2027-01-01');
   const back = parseMermaid(toMermaid(state)).timeline;
   assert.deepEqual(back.gantt.pis.flatMap((p) => p.sprints.map((s) => s.weeks)), [1, 1, 1, 2, 1]);
-  assert.equal(back.gantt.calendar.sprintPrefix, 'Step');
+  assert.equal(back.gantt.calendar.sprintPrefix, 'Schritt');
+});
+
+test('plural row labels for PI / sprint prefixes', async () => {
+  const { plural } = await import('../js/gantt.js');
+  assert.deepEqual(['Sprint', 'PI', 'Step', 'Schritt', 'Phase', 'Arbeitspaket', 'Iteration'].map(plural),
+    ['Sprints', 'PIs', 'Steps', 'Schritte', 'Phasen', 'Arbeitspakete', 'Iterations']);
+  assert.match(toMermaid(normalize((await import('../js/examples.js')).EXAMPLES['Gantt: EBP offer (steps)']())), /section Schritte\n/);
 });

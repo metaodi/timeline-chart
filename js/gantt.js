@@ -394,11 +394,11 @@ export function toGanttMermaid(t, frontmatter = []) {
     const plan = (g.pis ?? []).map((p) => ({ id: p.id, name: p.name, sprints: p.sprints.map((x) => [x.id, x.name, x.weeks]) }));
     out.push(`  %% ${PLAN_KEY} ${JSON.stringify(plan)}`);
     if (g.showPIs && cal.pis.length) {
-      out.push(`  section ${escapeGanttText(g.calendar.piPrefix || 'PI')}s`);
+      out.push(`  section ${escapeGanttText(plural(g.calendar.piPrefix || 'PI'))}`);
       for (const pi of cal.pis) out.push(`    ${escapeGanttText(pi.name)} : ${pi.id}, ${isoDate(pi.start)}, ${isoDate(pi.end)}`);
     }
     if (g.showSprints) {
-      out.push(`  section ${escapeGanttText(g.calendar.sprintPrefix || 'Sprint')}s`);
+      out.push(`  section ${escapeGanttText(plural(g.calendar.sprintPrefix || 'Sprint'))}`);
       // Short labels ("1", "2", "IP") fit inside the bars when sprints sit side by side.
       for (const s of cal.sprints) out.push(`    ${escapeGanttText(s.short)} : ${s.id}, ${isoDate(s.start)}, ${isoDate(s.end)}`);
     }
@@ -637,6 +637,18 @@ export function parseGanttMermaid(code) {
   snapToSprints(g);
   if (!seenHeader) res.warnings.unshift('No "gantt" header found');
   return res;
+}
+
+/**
+ * Row label for the PI / sprint row: the prefix in the plural ("Sprints", "PIs").
+ * German prefixes get their German plural ("Schritt" -> "Schritte", "Phase" -> "Phasen").
+ */
+const GERMAN_PLURALS = { schritt: 'Schritte', phase: 'Phasen', arbeitspaket: 'Arbeitspakete', etappe: 'Etappen' };
+export function plural(word) {
+  const w = String(word).trim();
+  const german = GERMAN_PLURALS[w.toLowerCase()];
+  if (german) return w[0] === w[0].toLowerCase() ? german.toLowerCase() : german;
+  return /s$/i.test(w) ? w : `${w}s`;
 }
 
 /** End date as drawn after a bar or milestone ("31.03.2027" or "2027-03-31"). */

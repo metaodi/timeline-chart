@@ -62,7 +62,7 @@ export function ebpExample() {
   return {
     mode: 'gantt',
     theme: 'ebp',
-    title: 'Schedule',
+    title: 'Zeitplan',
     titleAlign: 'left',
     gantt: {
       calendar: { startDate: '' },
@@ -73,29 +73,29 @@ export function ebpExample() {
       rows: ['none', 'none'],
       endDates: 'dmy',
       sections: [
-        { name: 'Start', color: 4, tasks: [point('start', 'Project start', '2026-10-01')] },
+        { name: 'Start', color: 4, tasks: [point('start', 'Mandatsbeginn', '2026-10-01')] },
         {
-          name: 'Work packages',
+          name: 'Arbeitspakete',
           color: 1,
           tasks: [
-            task('cat', 'Symbol catalogue', '2026-10-15', '2026-11-09'),
-            task('lines', 'Line orientation', '2026-10-15', '2026-12-07'),
-            task('ocr', 'Text recognition and matching', '2026-11-02', '2027-03-31', { look: 'hatch', note: 'Independent work package' }),
-            task('test', 'Network segmentation test area', '2026-12-01', '2027-04-30'),
-            task('vec', 'Vectorisation of the terrain map (incl. labelling)', '2027-02-01', '2027-07-31'),
-            task('net', 'Network segmentation', '2027-05-03', '2027-09-30'),
-            task('sym', 'Symbolisation of the vector data', '2027-10-01', '2027-10-31', { look: 'option', note: 'Option' }),
+            task('cat', 'Symbolkatalog', '2026-10-15', '2026-11-09'),
+            task('lines', 'Orientierung der Linien', '2026-10-15', '2026-12-07'),
+            task('ocr', 'Texterkennung und Zuordnung', '2026-11-02', '2027-03-31', { look: 'hatch', note: 'Unabhängiges Arbeitspaket' }),
+            task('test', 'Netzsegmentierung Testgebiet', '2026-12-01', '2027-04-30'),
+            task('vec', 'Vektorisierung Geländekarte (inkl. Labelling)', '2027-02-01', '2027-07-31'),
+            task('net', 'Netzsegmentierung', '2027-05-03', '2027-09-30'),
+            task('sym', 'Symbolisierung der Vektordaten', '2027-10-01', '2027-10-31', { look: 'option', note: 'Option' }),
           ],
         },
         {
-          name: 'Client approval',
+          name: 'Freigabe Auftraggeber',
           color: 2,
           tasks: [
-            task('ok1', 'Approval: line orientation', '2026-12-08', '2026-12-31'),
-            task('ok2', 'Approval: test area', '2027-05-03', '2027-05-31'),
+            task('ok1', 'Freigabe: Orientierung der Linien', '2026-12-08', '2026-12-31'),
+            task('ok2', 'Freigabe: Netzsegmentierung Testgebiet', '2027-05-03', '2027-05-31'),
           ],
         },
-        { name: 'Acceptance', color: 4, tasks: [point('done', 'Acceptance of the vector data', '2027-11-01')] },
+        { name: 'Abnahme', color: 4, tasks: [point('done', 'Abnahme vektorisierte Daten', '2027-11-01')] },
       ],
     },
   };
@@ -103,20 +103,20 @@ export function ebpExample() {
 
 /**
  * Offer in the EBP style: the steps of the approach are "sprints" of different
- * lengths (prefix "Step"), the positions of the effort estimate are sections.
+ * lengths (prefix "Schritt"), the positions of the effort estimate are sections.
  * Durations refer to steps, so changing a step's length moves the plan.
  */
 export function ebpOfferExample() {
   const task = (id, name, from, duration, extra = {}) => ({ id, name, type: 'task', status: '', from, duration, to: '', ...extra });
   const point = (id, name, from, extra = {}) => ({ id, name, type: 'milestone', status: '', from, duration: '', to: '', ...extra });
-  const step = (n, weeks) => ({ id: `s${n}`, name: `Step ${n}`, weeks });
+  const step = (n, weeks) => ({ id: `s${n}`, name: `Schritt ${n}`, weeks });
   return {
     mode: 'gantt',
     theme: 'ebp',
-    title: 'UX/UI concept for a data download app – approach',
+    title: 'UX/UI-Konzeption Datenbezug-Applikation – Vorgehen',
     titleAlign: 'left',
     gantt: {
-      calendar: { startDate: '2026-11-30', sprintWeeks: 1, sprintCount: 5, sprintsPerPI: 5, ipIteration: false, firstSprint: 1, firstPI: '1', sprintPrefix: 'Step', piPrefix: 'Phase' },
+      calendar: { startDate: '2026-11-30', sprintWeeks: 1, sprintCount: 5, sprintsPerPI: 5, ipIteration: false, firstSprint: 1, firstPI: '1', sprintPrefix: 'Schritt', piPrefix: 'Phase' },
       // one group without a name = steps without a phase
       pis: [{ id: 'pi1', name: '', sprints: [step(1, 1), step(2, 1), step(3, 1), step(4, 2), step(5, 1)] }],
       showPIs: false,
@@ -126,32 +126,32 @@ export function ebpOfferExample() {
       endDates: 'dmy',
       sections: [
         {
-          name: '1 Concept and feasibility',
+          name: '1 Konzeption und Machbarkeit',
           color: 1,
           tasks: [
-            task('prep', '1.1 Preparation and first concept proposal', 'plan', '1s', { note: '1 person-day' }),
+            task('prep', '1.1 Vorbereitung und erster Konzeptvorschlag', 'plan', '1s', { note: '1 Personentag' }),
             point('kick', 'Kick-off', 's1', { status: 'crit' }),
-            task('feas', '1.2 Technical feasibility (alongside)', 'plan', '', { to: 's2', look: 'hatch', note: '1 person-day – checks the concept against the data API; findings flow into the design' }),
-            task('ux1', '1.3 UI design, interaction logic, 1st revision', 's2', '1s', { note: '2.5 person-days for both revisions' }),
-            task('ux2', '1.3 2nd revision', 's4', '1s'),
-            task('hand', '1.4 Wrap-up and handover', 's5', '1s', { note: '0.5 person-days' }),
+            task('feas', '1.2 Prüfung technische Machbarkeit (begleitend)', 'plan', '', { to: 's2', look: 'hatch', note: '1 Personentag – prüft das Konzept gegen die Daten-API; Erkenntnisse fliessen laufend ins Design ein' }),
+            task('ux1', '1.3 UI-Design, Bedienlogik, 1. Überarbeitung', 's2', '1s', { note: '2.5 Personentage für beide Überarbeitungsrunden' }),
+            task('ux2', '1.3 2. Überarbeitung', 's4', '1s'),
+            task('hand', '1.4 Abschluss und Übergabe', 's5', '1s', { note: '0.5 Personentage' }),
           ],
         },
         {
           name: '2 Option',
           color: 1,
-          tasks: [task('hall', '2 Hallway test (option)', 's3', '1s', { look: 'option', note: '1 person-day, agreed with the client beforehand' })],
+          tasks: [task('hall', '2 Hallway-Test (Option)', 's3', '1s', { look: 'option', note: '1 Personentag, vorab mit dem Auftraggeber abgestimmt' })],
         },
         {
-          name: 'Client',
+          name: 'Auftraggeber',
           color: 2,
           tasks: [
-            task('fb1', 'Bundled feedback 1st revision', 's3', '1s'),
-            task('fb2', 'Bundled feedback 2nd revision', 'after:ux2', '3d'),
-            point('ok', 'Design approval', 's5', { status: 'crit' }),
+            task('fb1', 'Gebündelte Rückmeldungen 1. Überarbeitung', 's3', '1s'),
+            task('fb2', 'Gebündelte Rückmeldungen 2. Überarbeitung', 'after:ux2', '3d'),
+            point('ok', 'Designfreigabe', 's5', { status: 'crit' }),
           ],
         },
-        { name: '3 Project management', color: 3, tasks: [task('pm', '3 Project management', 'plan', '', { to: 's5', note: '1 person-day' })] },
+        { name: '3 Projektleitung', color: 3, tasks: [task('pm', '3 Projektleitung', 'plan', '', { to: 's5', note: '1 Personentag' })] },
       ],
     },
   };

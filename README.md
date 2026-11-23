@@ -64,7 +64,7 @@ data.
 - **End dates** (*Dates* next to the plan start): a dot at the end of every bar with its end date after it
   (`31.03.2027` or `2027-03-31`), and the date next to every milestone. The chart grows on the right to fit them.
   See the examples *Gantt: EBP project* and *Gantt: EBP offer (steps)* (the steps of an offer as "sprints" of
-  different lengths with the prefix *Step*, the positions of the effort estimate as sections).
+  different lengths with the prefix *Schritt*, the positions of the effort estimate as sections).
 - Change a duration or the plan start and everything that follows moves with it.
 - **Row stripes**: the alternating row colours are configurable next to the plan start – *Standard* (grey / none),
   *Subtle grey* (grey / a lighter grey mixed from the theme), *No stripes*, or two custom colours.
