@@ -83,9 +83,10 @@ data.
   the preview shows it at full width and scrolls horizontally; **⤢ Wide** hides the editor so the chart can use the
   whole window. PNG/SVG exports have the same width as the preview (so the wide view gives a wide export). On phones
   it scales down (zoom for details) and exports use the chart's own width.
-  **Width min – max** (plan card) sets your own range in px instead of 1000–4000: the chart grows with the plan but
-  stays within it, and the desktop preview widens it only up to the maximum. Same value twice = fixed width (preview
-  and export alike), e.g. for a slide. Kept as `%% chart-width <min> <max>` (`auto` for an empty field).
+  The **Width** slider (plan card, two handles, 300–8000px) sets your own range instead of 1000–4000: the chart grows
+  with the plan but stays within it, and the desktop preview widens it only up to the maximum. Both handles on the
+  same value = fixed width (preview and export alike), e.g. for a slide; **Auto** goes back to the automatic range.
+  Kept as `%% chart-width <min> <max>` (`auto` for a bound left automatic).
 - **Colours**: PIs are black and sprints grey (in dark themes: light), so colour is left to the sections. Each section
   (e.g. a category of work) has its own colour: automatic (never red, which means *critical*) or chosen with the
   colour dot in the section header.

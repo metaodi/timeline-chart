@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { toMermaid, normalize } from '../js/model.js';
 import { parseMermaid } from '../js/parser.js';
-import { widthRange, cleanWidthRange } from '../js/gantt.js';
+import { widthRange, widthLabel, cleanWidthRange } from '../js/gantt.js';
 import { pngScale, cleanPngSize } from '../js/export.js';
 
 const calendar = { startDate: '2026-01-05', sprintWeeks: 2, sprintCount: 8, sprintsPerPI: 4, ipIteration: true, firstPI: '2026.1' };
@@ -25,7 +25,7 @@ test('chart width: automatic range 1000–4000, or the user range', () => {
 test('chart width: cleaned (limits, swapped bounds) and round-trips through the Mermaid code', () => {
   assert.deepEqual(cleanWidthRange(2000, 1200), { minWidth: 1200, maxWidth: 2000 });
   assert.deepEqual(cleanWidthRange('x', 50), { minWidth: 0, maxWidth: 300 });
-  assert.deepEqual(cleanWidthRange(-1, 99999), { minWidth: 0, maxWidth: 10000 });
+  assert.deepEqual(cleanWidthRange(-1, 99999), { minWidth: 0, maxWidth: 8000 });
   const s = chart({ minWidth: 2000, maxWidth: 1200 });
   assert.deepEqual([s.gantt.minWidth, s.gantt.maxWidth], [1200, 2000]);
   const code = toMermaid(s);
@@ -35,6 +35,12 @@ test('chart width: cleaned (limits, swapped bounds) and round-trips through the 
   const half = parseMermaid(toMermaid(chart({ maxWidth: 1800 }))).timeline.gantt;
   assert.deepEqual([half.minWidth, half.maxWidth], [0, 1800]);
   assert.doesNotMatch(toMermaid(chart()), /chart-width/);
+});
+
+test('chart width: slider label', () => {
+  assert.equal(widthLabel({}), 'Auto · 1000 – 4000 px');
+  assert.equal(widthLabel({ maxWidth: 2500 }), '1000 – 2500 px');
+  assert.equal(widthLabel({ minWidth: 1600, maxWidth: 1600 }), '1600 px fixed');
 });
 
 test('PNG size: density or target width, capped to what browsers can draw', () => {

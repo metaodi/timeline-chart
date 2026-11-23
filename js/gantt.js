@@ -95,7 +95,7 @@ const END_DATES_KEY = 'end-dates';
 const WIDTH_KEY = 'chart-width';
 /** Automatic chart width range and the limits a user may set (px). */
 export const AUTO_WIDTH = { min: 1000, max: 4000 };
-export const WIDTH_LIMITS = { min: 300, max: 10000 };
+export const WIDTH_LIMITS = { min: 300, max: 8000, step: 50 }; // also the width slider's range
 const cleanWidth = (w) => {
   const n = Math.round(Number(w));
   return Number.isFinite(n) && n > 0 ? Math.max(WIDTH_LIMITS.min, Math.min(WIDTH_LIMITS.max, n)) : 0;
@@ -418,6 +418,13 @@ export function widthRange(g) {
   const hi = max || Math.max(AUTO_WIDTH.max, min);
   const lo = Math.min(min || AUTO_WIDTH.min, hi);
   return { min: lo, max: hi, custom: Boolean(min || max) };
+}
+
+/** Text next to the width slider: "Auto · 1000 – 4000 px", "1200 – 2000 px", "1600 px fixed". */
+export function widthLabel(g) {
+  const { min, max, custom } = widthRange(g);
+  if (!custom) return `Auto · ${min} – ${max} px`;
+  return min === max ? `${min} px fixed` : `${min} – ${max} px`;
 }
 
 /**
