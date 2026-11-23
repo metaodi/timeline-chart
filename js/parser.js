@@ -2,7 +2,7 @@
  * Parse Mermaid timeline code back into the editor model (see model.js).
  * Lenient on purpose: unknown lines are reported as warnings, not errors.
  */
-import { emptyTimeline, newPeriod, THEMES } from './model.js';
+import { emptyTimeline, newPeriod, THEMES, APP_THEME_KEY } from './model.js';
 import { parseGanttMermaid } from './gantt.js';
 
 /** Turn Mermaid text back into editor text: <br> -> newline, entity codes -> chars. */
@@ -26,6 +26,10 @@ function splitEvents(text) {
 function readFrontmatter(block, t) {
   const theme = block.match(/^\s*theme:\s*['"]?([\w-]+)/m);
   if (theme && THEMES.includes(theme[1])) t.theme = theme[1];
+  // app themes Mermaid doesn't know are kept in a YAML comment next to the Mermaid theme
+  const app = block.split('\n').map((l) => l.trim()).find((l) => l.startsWith(APP_THEME_KEY));
+  const appTheme = app?.slice(APP_THEME_KEY.length).trim();
+  if (THEMES.includes(appTheme)) t.theme = appTheme;
   if (/^\s*disableMulticolor:\s*true\b/m.test(block)) t.disableMulticolor = true;
 }
 

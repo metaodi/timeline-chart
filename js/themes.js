@@ -6,6 +6,7 @@
  * written into exported SVG/PNG files. The preset ids match Mermaid theme names,
  * which are also written into the Mermaid code for use in other Mermaid tools.
  * Add a preset here (and its id to THEMES in model.js) to offer a new theme.
+ * A preset that is not a Mermaid theme names the closest one in `mermaid`.
  */
 export const PRESETS = {
   default: {
@@ -64,7 +65,32 @@ export const PRESETS = {
       series: ['#d14d41', '#da702c', '#d0a215', '#879a39', '#3aa99f', '#4385be', '#8b7ec8', '#ce5d97'],
     },
   },
+  ebp: {
+    label: 'EBP',
+    mermaid: 'neutral',
+    vars: {
+      '--pele-bg': '#ffffff',
+      '--pele-fg': '#1a1a1a',
+      '--pele-fg-on-light': '#1a1a1a',
+      '--pele-muted': '#5f6368',
+      '--pele-line': '#3c3c3c',
+      '--pele-surface': '#f3f3f3',
+      '--pele-surface-alt': '#e8e8e8',
+      '--pele-border': '#c4c4c4',
+      '--pele-accent': '#b01e2d',
+      '--pele-critical': '#b01e2d',
+      '--pele-font': "'Helvetica Neue', Helvetica, Arial, 'DejaVu Sans', sans-serif",
+      '--pele-title-weight': 'normal',
+      '--pele-radius': '0px',
+      // 1 work (light red), 2 client approval (blue-grey), 3 dark grey, 4 EBP red (critical),
+      // 5 mid red, 6 slate, 7 dark red, 8 light grey
+      series: ['#e3b3b9', '#b3bbc4', '#5f6872', '#b01e2d', '#c25a67', '#7d8a97', '#7a1520', '#cfd3d8'],
+    },
+  },
 };
+
+/** Mermaid theme name for a preset (written into the code's frontmatter). */
+export const mermaidTheme = (theme) => PRESETS[theme]?.mermaid ?? theme;
 
 /**
  * CSS custom properties for a timeline's theme.

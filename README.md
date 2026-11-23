@@ -59,6 +59,16 @@ data.
 - **Links** (🔗): an entry becomes clickable (Mermaid `click <id> href "…"`, so it works in other Mermaid tools too) and
   is marked with ↗; links open in a new tab. Notes are kept in the code as a `%% notes …` comment.
 - **Status**: planned, in progress (outlined), done (faded), critical (red).
+- **Look** of a bar: solid, *hatched* (e.g. an independent work package) or *dashed* (an option). Mermaid has no
+  such styles, so they are kept as a `%% task-looks {…}` comment; the Pele playground CSS approximates hatching.
+- **End dates** (*Dates* next to the plan start): a dot at the end of every bar with its end date after it
+  (`31.03.2027` or `2027-03-31`), and the date next to every milestone. The chart grows on the right to fit them.
+  See the examples *Gantt: EBP project* and *Gantt: EBP offer (steps)* (the steps of an offer as "sprints" of
+  different lengths with the prefix *Schritt*, the positions of the effort estimate as sections).
+- **Time axis** (*Axis* next to the plan start): presets *05 Jan* (one tick per sprint), *by month 01.2027* (a grid
+  line per month) and *05.01.2027*, or *Custom…*: any label format (Mermaid `axisFormat`, strftime: `%d` day, `%m`
+  month, `%Y` year, `%b` Jan, `%V` week number, e.g. `KW %V`) and a tick interval in days, weeks or months (or
+  automatic: one per sprint). Both are standard Mermaid (`axisFormat`, `tickInterval`) and come back on import.
 - Change a duration or the plan start and everything that follows moves with it.
 - **Row stripes**: the alternating row colours are configurable next to the plan start – *Standard* (grey / none),
   *Subtle grey* (grey / a lighter grey mixed from the theme), *No stripes*, or two custom colours.
@@ -98,7 +108,7 @@ Any static file server works; ES modules just need to be served over HTTP rather
 ```
 ---
 config:
-  theme: forest            # default | neutral | dark | forest | base
+  theme: forest            # default | neutral | dark | forest | base (app-only themes: see below)
   timeline:
     disableMulticolor: true
 ---
@@ -118,7 +128,9 @@ Themes: Pele styles diagrams with CSS variables, so the theme menu applies colou
 preview and bakes them into SVG/PNG exports. On SVG export every `var(...)` is replaced by its concrete colour and the
 background is a real rectangle (`js/svg-vars.js`), so the file looks the same in programs without CSS-variable support
 (Inkscape, Illustrator, PowerPoint, …). The matching Mermaid theme name is written into the code's frontmatter so the
-diagram looks similar in other Mermaid tools.
+diagram looks similar in other Mermaid tools. App-only themes such as **EBP** (EBP red, light red for work packages,
+blue-grey for client approvals, critical items in EBP red, square bars) write the closest Mermaid theme plus a YAML comment
+(`# timeline-builder theme: ebp`) that the importer reads back.
 
 Mermaid has no native milestone/deadline concept in timelines, so item types are stored as an emoji prefix
 (e.g. `🏁 Go-live`). That keeps them visible in the chart and lets them survive copy & import.

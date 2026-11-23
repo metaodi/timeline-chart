@@ -209,3 +209,93 @@ test('milestones close together get separate ranges that overlap (own rows), ins
   const [, c2] = range('Very last day');
   assert.ok(c2 <= '2026-05-22', 'range stays inside the chart (no longer time axis)');
 });
+
+test('bar looks and end dates: written as comments, restored on import', async () => {
+  const { formatEndDate } = await import('../js/gantt.js');
+  const t = (name, look, extra = {}) => ({ name, type: 'task', from: '2026-10-15', duration: '', to: '2026-11-09', look, ...extra });
+  const state = {
+    mode: 'gantt',
+    gantt: {
+      endDates: 'dmy',
+      sections: [{ name: 'Work', tasks: [t('A', 'hatch'), t('B', 'option'), t('C', ''), { name: 'M', type: 'milestone', from: '2026-10-01', look: 'hatch' }] }],
+    },
+  };
+  const code = toMermaid(state);
+  assert.match(code, /%% task-looks \{"g0t0":"hatch","g0t1":"option"\}\n/); // not for milestones
+  assert.match(code, /%% end-dates dmy\n/);
+  const g = parseMermaid(code).timeline.gantt;
+  assert.deepEqual(g.sections[0].tasks.map((x) => x.look), ['hatch', 'option', '', '']);
+  assert.equal(g.endDates, 'dmy');
+  // nothing written by default, unknown values dropped
+  assert.doesNotMatch(toMermaid({ mode: 'gantt', gantt: { sections: [{ name: 'W', tasks: [t('A', '')] }] } }), /task-looks|end-dates/);
+  const n = normalize({ mode: 'gantt', gantt: { endDates: 'xyz', sections: [{ name: 'W', tasks: [t('A', 'zigzag')] }] } });
+  assert.equal(n.gantt.endDates, '');
+  assert.equal(n.gantt.sections[0].tasks[0].look, '');
+  // date formats
+  const d = new Date(Date.UTC(2027, 2, 31));
+  assert.equal(formatEndDate(d, 'dmy'), '31.03.2027');
+  assert.equal(formatEndDate(d, 'iso'), '2027-03-31');
+  assert.equal(formatEndDate(d, ''), '');
+  assert.equal(formatEndDate(null, 'dmy'), '');
+});
+
+test('EBP example: EBP theme, end dates, hatched and dashed bars, round trip', async () => {
+  const { EXAMPLES } = await import('../js/examples.js');
+  const state = normalize(EXAMPLES['Gantt: EBP project']());
+  assert.equal(state.theme, 'ebp');
+  assert.equal(state.gantt.endDates, 'dmy');
+  const looks = state.gantt.sections.flatMap((s) => s.tasks.map((t) => t.look)).filter(Boolean);
+  assert.deepEqual(looks, ['hatch', 'option']);
+  const back = parseMermaid(toMermaid(state)).timeline;
+  assert.equal(back.theme, 'ebp');
+  assert.deepEqual(back.gantt.sections.flatMap((s) => s.tasks.map((t) => [t.name, t.from, t.to, t.look])),
+    state.gantt.sections.flatMap((s) => s.tasks.map((t) => [t.name, t.from, t.to, t.look])));
+});
+
+test('EBP offer example: steps as sprints of different lengths, durations in steps', async () => {
+  const { EXAMPLES } = await import('../js/examples.js');
+  const state = normalize(EXAMPLES['Gantt: EBP offer (steps)']());
+  const { cal, dates } = scheduleGantt(state.gantt);
+  assert.deepEqual(cal.sprints.map((s) => [s.name, s.weeks]), [['Schritt 1', 1], ['Schritt 2', 1], ['Schritt 3', 1], ['Schritt 4', 2], ['Schritt 5', 1]]);
+  assert.equal(cal.pis.length, 0); // steps without a phase
+  // "2nd revision" lasts one step = the two weeks of step 4
+  const si = 0, ti = state.gantt.sections[0].tasks.findIndex((t) => t.id === 'ux2');
+  assert.equal(dates[si][ti].start.toISOString().slice(0, 10), '2026-12-21');
+  assert.equal(dates[si][ti].end.toISOString().slice(0, 10), '2027-01-01');
+  const back = parseMermaid(toMermaid(state)).timeline;
+  assert.deepEqual(back.gantt.pis.flatMap((p) => p.sprints.map((s) => s.weeks)), [1, 1, 1, 2, 1]);
+  assert.equal(back.gantt.calendar.sprintPrefix, 'Schritt');
+});
+
+test('plural row labels for PI / sprint prefixes', async () => {
+  const { plural } = await import('../js/gantt.js');
+  assert.deepEqual(['Sprint', 'PI', 'Step', 'Schritt', 'Phase', 'Arbeitspaket', 'Iteration'].map(plural),
+    ['Sprints', 'PIs', 'Steps', 'Schritte', 'Phasen', 'Arbeitspakete', 'Iterations']);
+  assert.match(toMermaid(normalize((await import('../js/examples.js')).EXAMPLES['Gantt: EBP offer (steps)']())), /section Schritte\n/);
+});
+
+test('time axis: free label format and tick interval, written as Mermaid and read back', () => {
+  const plan = (g) => ({ mode: 'gantt', gantt: { calendar: { ...calendar }, sections: [{ name: 'W', tasks: [{ name: 'A', type: 'task', from: 'plan', duration: '2s' }] }], ...g } });
+  // months with a monthly grid
+  const month = toMermaid(plan({ axisFormat: '%m.%Y', tickInterval: '1month' }));
+  assert.match(month, /axisFormat %m\.%Y\n  tickInterval 1month\n/);
+  assert.doesNotMatch(month, /2week|weekday/);
+  assert.deepEqual(pick(parseMermaid(month).timeline.gantt), ['%m.%Y', '1month']);
+  // custom: week numbers every 3 weeks
+  const weeks = toMermaid(plan({ axisFormat: 'KW %V', tickInterval: '3week' }));
+  assert.match(weeks, /axisFormat KW %V\n  tickInterval 3week\n  weekday monday\n/);
+  assert.deepEqual(pick(parseMermaid(weeks).timeline.gantt), ['KW %V', '3week']);
+  // automatic: default format, one tick per sprint – and that stays automatic on import
+  const auto = toMermaid(plan({}));
+  assert.match(auto, /axisFormat %d %b\n  tickInterval 2week\n/);
+  assert.deepEqual(pick(parseMermaid(auto).timeline.gantt), ['', '']);
+  // without sprints: no tick interval (Pele chooses)
+  assert.doesNotMatch(toMermaid(plan({ calendar: { startDate: '' } })), /tickInterval/);
+  // characters that would break the grammar are dropped, unknown intervals ignored
+  assert.deepEqual(pick(normalize(plan({ axisFormat: '%d#%m;\nx', tickInterval: '2years' })).gantt), ['%d%mx', '']);
+  assert.deepEqual(pick(normalize(plan({ axisFormat: '%d %b', tickInterval: '0week' })).gantt), ['', '']);
+});
+
+function pick(g) {
+  return [g.axisFormat, g.tickInterval];
+}

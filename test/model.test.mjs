@@ -105,3 +105,15 @@ test('title alignment is a setting outside the Mermaid code', () => {
   const t = { title: 'T', periods: [{ label: 'a', events: [] }] };
   assert.equal(toMermaid({ ...t, titleAlign: 'left' }), toMermaid(t));
 });
+
+test('app themes Mermaid does not know: Mermaid theme in the frontmatter, app theme round-trips', async () => {
+  const { parseMermaid } = await import('../js/parser.js');
+  const code = toMermaid({ theme: 'ebp', periods: [{ label: 'a', events: [] }] });
+  assert.match(code, /^---\nconfig:\n  theme: neutral\n  # timeline-builder theme: ebp\n---\n/);
+  assert.equal(parseMermaid(code).timeline.theme, 'ebp');
+  const gantt = toMermaid({ mode: 'gantt', theme: 'ebp' });
+  assert.match(gantt, /theme: neutral\n  # timeline-builder theme: ebp\n/);
+  assert.equal(parseMermaid(gantt).timeline.theme, 'ebp');
+  // a plain Mermaid theme is still written as is
+  assert.doesNotMatch(toMermaid({ theme: 'dark', periods: [{ label: 'a', events: [] }] }), /timeline-builder theme/);
+});

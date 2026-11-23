@@ -53,7 +53,8 @@ post-processing on the SVG, in this order:
 3. `alignTitle`
 4. `addNotes` – appends footnotes, grows the viewBox (preview then calls `mounted.zoom.refresh()`)
 
-Export additionally: `applyVars` (theme variables on the root) and, in `svgMarkup`, `inlineCssVars` + a background
+Export post-processes the SVG attached off screen (text widths are measured with `getComputedTextLength`). Export
+additionally: `applyVars` (theme variables on the root) and, in `svgMarkup`, `inlineCssVars` + a background
 `<rect>`. On desktop the preview widens Gantt charts to at least the preview width (`previewCode()` raises
 `useWidth`), and exports use the same `previewCode()` – the export is as wide as what the user sees (wide view
 included). On phones both use the code's own width.
@@ -64,11 +65,14 @@ included). On phones both use the code's own width.
   calendar, then edited freely. A PI with an empty name = sprints without PI. Dates follow from `calendar.startDate`
   and the sprint lengths.
 - `sections: [{name, color, tasks}]`; task = `{id, name, type: task|milestone|deadline, status, from, duration, to,
-  note, link}`.
+  note, link, look}` – `look`: `''` | `hatch` | `option` (bars only, drawn by `gantt-style.js`).
   - `from`: `prev` | `plan` | `after:<taskId>` | sprint id `sN` | `YYYY-MM-DD`
   - `duration`: `Ns` sprints / `Nw` weeks / `Nd` working days, or `''` = until `to` (sprint id or date)
   - milestones/deadlines: position in `from` (sprint → its end)
-- `layout` (`compact` | `ordered`), `rows` (stripe tokens), `showPIs`, `showSprints`, `showNotes`.
+- `layout` (`compact` | `ordered`), `rows` (stripe tokens), `showPIs`, `showSprints`, `showNotes`, `endDates`
+  (`''` | `dmy` | `iso`: dot + date after bars/milestones; the chart's viewBox grows on the right to fit).
+  `axisFormat` (strftime, `''` = `%d %b`) and `tickInterval` (`Nday|Nweek|Nmonth`, `''` = one per sprint): written as
+  Mermaid `axisFormat` / `tickInterval`; on import a tick equal to the sprint length becomes `''` again.
 - Task `id` (`t…`) is stable (for `after:` refs). **In the Mermaid code** tasks are `g<section>t<index>`, sprints `sN`,
   PIs `piN` – styling, notes, links and the playground CSS address elements by these `data-id`s.
 
@@ -76,7 +80,8 @@ included). On phones both use the code's own width.
 
 Concrete dates only (Mermaid can't express our scheduling). Everything Mermaid can't hold goes into `%%` comments
 that the importer reads back: `%% sprint-calendar …`, `%% sprint-plan [json]`, `%% section-colours …`,
-`%% row-colours …`, `%% notes {json}`. Links use standard `click <id> href "…"`. Layout = presence of
+`%% row-colours …`, `%% notes {json}`, `%% task-looks {json}`, `%% end-dates …`. App-only themes (e.g. `ebp`)
+write the closest Mermaid theme plus a YAML comment `# timeline-builder theme: …` in the frontmatter. Links use standard `click <id> href "…"`. Layout = presence of
 `displayMode: compact` in the frontmatter; `useWidth` sets the chart width. Durations/`after` rules come back as
 fixed sprints/dates on import (share links, autosave and exported PNG/SVG files keep the full state).
 
