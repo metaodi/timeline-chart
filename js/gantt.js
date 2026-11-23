@@ -69,6 +69,7 @@ export function emptyGantt() {
     showSprints: true,
     rows: [...ROW_PRESETS.standard.rows], // zebra stripes of the chart rows
     showNotes: true, // numbered notes below the chart
+    showLegend: true, // legend below the chart (only elements that occur)
     layout: 'compact', // 'compact' (packed by date) | 'ordered' (one row per entry, editor order)
     excludeWeekends: false, // kept for imported charts; no UI (clean look)
     todayMarker: false,
@@ -139,6 +140,7 @@ export function normalizeGantt(g) {
   d.calendar = { ...DEFAULT_CALENDAR, ...(d.calendar || {}) };
   for (const k of ['showPIs', 'showSprints', 'excludeWeekends', 'todayMarker']) d[k] = Boolean(d[k]);
   d.showNotes = d.showNotes !== false;
+  d.showLegend = d.showLegend !== false;
   d.layout = d.layout === 'ordered' ? 'ordered' : 'compact';
   d.rows = [0, 1].map((i) => (isRowToken(d.rows?.[i]) ? d.rows[i].toLowerCase() : ROW_PRESETS.standard.rows[i]));
   d.pis = Array.isArray(d.pis) ? normalizePlan(d.pis) : sprintPlanFromConfig(d.calendar);

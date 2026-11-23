@@ -210,7 +210,7 @@ export function createGanttEditor(root, api) {
           <button type="button" class="btn small" data-gaction="pi-add">+ PI</button>
         </div>
       </details>
-      <div class="gcal-opts">${opt('showPIs', 'Show PIs')}${opt('showSprints', 'Show sprints')}${opt('showNotes', 'Notes below chart')}</div>
+      <div class="gcal-opts">${opt('showPIs', 'Show PIs')}${opt('showSprints', 'Show sprints')}${opt('showNotes', 'Notes below chart')}${opt('showLegend', 'Legend')}</div>
       <div class="grows">
         <span class="muted small">Order</span>
         <select data-glayout aria-label="Order of the entries">

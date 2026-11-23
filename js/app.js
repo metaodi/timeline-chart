@@ -8,6 +8,7 @@ import { styleGantt } from './gantt-style.js';
 import { peleCss } from './pele-css.js';
 import { alignTitle } from './svg-title.js';
 import { addNotes } from './gantt-notes.js';
+import { addLegend } from './gantt-legend.js';
 import { collapseCalendarRows } from './gantt-collapse.js';
 import { emptyGantt, newGanttSection } from './gantt.js';
 import { toMermaid, normalize, isEmpty, newPeriod, newSection, THEMES, KINDS, getKind, stripKind, setKind } from './model.js';
@@ -397,6 +398,7 @@ function previewOptions() {
       insideLabels = styleGantt(svg, state);
       alignTitle(svg, state.titleAlign);
       if (state.mode === 'gantt') {
+        addLegend(svg, state);
         addNotes(svg, state);
         // the notes make the chart taller: let Pele's zoom pick up the new size
         queueMicrotask(() => mounted?.zoom?.refresh());
@@ -463,7 +465,10 @@ function exportSvg() {
     collapseCalendarRows(el, state);
     styleGantt(el, state);
     alignTitle(el, state.titleAlign);
-    if (state.mode === 'gantt') addNotes(el, state);
+    if (state.mode === 'gantt') {
+      addLegend(el, state);
+      addNotes(el, state);
+    }
     const background = $('#transparent').checked ? null : vars['--pele-bg'];
     return { el, background };
   } catch (err) {

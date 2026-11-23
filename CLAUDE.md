@@ -36,6 +36,7 @@ Plain ES modules in `js/`, one global app state (plain JSON) in `app.js`, re-ren
 | `gantt-collapse.js` | "In my order" layout: collapses PI/sprint rows of Pele's non-compact layout |
 | `gantt-style.js` | colours bars per section, neutral PIs/sprints, statuses, row stripes, shortens labels |
 | `gantt-notes.js` | tooltips, numbered notes below the chart, link markers |
+| `gantt-legend.js` | legend row below the axis, right-aligned, only elements that occur (`legendItems`) |
 | `svg-title.js` | left-aligned title |
 | `svg-vars.js` | resolves CSS `var()` to concrete colours for SVG export |
 | `themes.js` | colour presets (Pele CSS variables), `PELE_DEFAULTS`, row colour tokens |
@@ -51,7 +52,8 @@ post-processing on the SVG, in this order:
 1. `collapseCalendarRows` (only gantt + layout `ordered`) – must run first, the others read positions
 2. `styleGantt` – returns the ids of labels drawn on bars (used by `pele-css.js`)
 3. `alignTitle`
-4. `addNotes` – appends footnotes, grows the viewBox (preview then calls `mounted.zoom.refresh()`)
+4. `addLegend` – appends the legend row below the axis, grows the viewBox
+5. `addNotes` – appends footnotes below that, grows the viewBox (preview then calls `mounted.zoom.refresh()`)
 
 Export additionally: `applyVars` (theme variables on the root) and, in `svgMarkup`, `inlineCssVars` + a background
 `<rect>`. On desktop the preview widens Gantt charts to at least the preview width (`previewCode()` raises
@@ -68,7 +70,7 @@ included). On phones both use the code's own width.
   - `from`: `prev` | `plan` | `after:<taskId>` | sprint id `sN` | `YYYY-MM-DD`
   - `duration`: `Ns` sprints / `Nw` weeks / `Nd` working days, or `''` = until `to` (sprint id or date)
   - milestones/deadlines: position in `from` (sprint → its end)
-- `layout` (`compact` | `ordered`), `rows` (stripe tokens), `showPIs`, `showSprints`, `showNotes`.
+- `layout` (`compact` | `ordered`), `rows` (stripe tokens), `showPIs`, `showSprints`, `showNotes`, `showLegend`.
 - Task `id` (`t…`) is stable (for `after:` refs). **In the Mermaid code** tasks are `g<section>t<index>`, sprints `sN`,
   PIs `piN` – styling, notes, links and the playground CSS address elements by these `data-id`s.
 
