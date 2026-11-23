@@ -251,3 +251,18 @@ test('EBP example: EBP theme, end dates, hatched and dashed bars, round trip', a
   assert.deepEqual(back.gantt.sections.flatMap((s) => s.tasks.map((t) => [t.name, t.from, t.to, t.look])),
     state.gantt.sections.flatMap((s) => s.tasks.map((t) => [t.name, t.from, t.to, t.look])));
 });
+
+test('EBP offer example: steps as sprints of different lengths, durations in steps', async () => {
+  const { EXAMPLES } = await import('../js/examples.js');
+  const state = normalize(EXAMPLES['Gantt: EBP offer (steps)']());
+  const { cal, dates } = scheduleGantt(state.gantt);
+  assert.deepEqual(cal.sprints.map((s) => [s.name, s.weeks]), [['Step 1', 1], ['Step 2', 1], ['Step 3', 1], ['Step 4', 2], ['Step 5', 1]]);
+  assert.equal(cal.pis.length, 0); // steps without a phase
+  // "2nd revision" lasts one step = the two weeks of step 4
+  const si = 0, ti = state.gantt.sections[0].tasks.findIndex((t) => t.id === 'ux2');
+  assert.equal(dates[si][ti].start.toISOString().slice(0, 10), '2026-12-21');
+  assert.equal(dates[si][ti].end.toISOString().slice(0, 10), '2027-01-01');
+  const back = parseMermaid(toMermaid(state)).timeline;
+  assert.deepEqual(back.gantt.pis.flatMap((p) => p.sprints.map((s) => s.weeks)), [1, 1, 1, 2, 1]);
+  assert.equal(back.gantt.calendar.sprintPrefix, 'Step');
+});

@@ -101,9 +101,66 @@ export function ebpExample() {
   };
 }
 
+/**
+ * Offer in the EBP style: the steps of the approach are "sprints" of different
+ * lengths (prefix "Step"), the positions of the effort estimate are sections.
+ * Durations refer to steps, so changing a step's length moves the plan.
+ */
+export function ebpOfferExample() {
+  const task = (id, name, from, duration, extra = {}) => ({ id, name, type: 'task', status: '', from, duration, to: '', ...extra });
+  const point = (id, name, from, extra = {}) => ({ id, name, type: 'milestone', status: '', from, duration: '', to: '', ...extra });
+  const step = (n, weeks) => ({ id: `s${n}`, name: `Step ${n}`, weeks });
+  return {
+    mode: 'gantt',
+    theme: 'ebp',
+    title: 'UX/UI concept for a data download app – approach',
+    titleAlign: 'left',
+    gantt: {
+      calendar: { startDate: '2026-11-30', sprintWeeks: 1, sprintCount: 5, sprintsPerPI: 5, ipIteration: false, firstSprint: 1, firstPI: '1', sprintPrefix: 'Step', piPrefix: 'Phase' },
+      // one group without a name = steps without a phase
+      pis: [{ id: 'pi1', name: '', sprints: [step(1, 1), step(2, 1), step(3, 1), step(4, 2), step(5, 1)] }],
+      showPIs: false,
+      showSprints: true,
+      layout: 'ordered',
+      rows: ['none', 'none'],
+      endDates: 'dmy',
+      sections: [
+        {
+          name: '1 Concept and feasibility',
+          color: 1,
+          tasks: [
+            task('prep', '1.1 Preparation and first concept proposal', 'plan', '1s', { note: '1 person-day' }),
+            point('kick', 'Kick-off', 's1', { status: 'crit' }),
+            task('feas', '1.2 Technical feasibility (alongside)', 'plan', '', { to: 's2', look: 'hatch', note: '1 person-day – checks the concept against the data API; findings flow into the design' }),
+            task('ux1', '1.3 UI design, interaction logic, 1st revision', 's2', '1s', { note: '2.5 person-days for both revisions' }),
+            task('ux2', '1.3 2nd revision', 's4', '1s'),
+            task('hand', '1.4 Wrap-up and handover', 's5', '1s', { note: '0.5 person-days' }),
+          ],
+        },
+        {
+          name: '2 Option',
+          color: 1,
+          tasks: [task('hall', '2 Hallway test (option)', 's3', '1s', { look: 'option', note: '1 person-day, agreed with the client beforehand' })],
+        },
+        {
+          name: 'Client',
+          color: 2,
+          tasks: [
+            task('fb1', 'Bundled feedback 1st revision', 's3', '1s'),
+            task('fb2', 'Bundled feedback 2nd revision', 'after:ux2', '3d'),
+            point('ok', 'Design approval', 's5', { status: 'crit' }),
+          ],
+        },
+        { name: '3 Project management', color: 3, tasks: [task('pm', '3 Project management', 'plan', '', { to: 's5', note: '1 person-day' })] },
+      ],
+    },
+  };
+}
+
 export const EXAMPLES = {
   'Gantt: PI roadmap (durations)': () => ganttExample(),
   'Gantt: EBP project': () => ebpExample(),
+  'Gantt: EBP offer (steps)': () => ebpOfferExample(),
   'PI plan (SAFe, sprints per PI)': `timeline
   title ART Phoenix – PI 2026.1
   section PI 2026.1 <br> 5 Jan – 13 Mar
