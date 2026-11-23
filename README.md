@@ -58,7 +58,8 @@ data.
   listed under the chart – visible in PNGs and prints too. URLs in notes become links.
 - **Legend** (toggle *Legend*): a row below the time axis, right-aligned, with only what occurs in the chart –
   statuses (if not all planned), milestones, deadlines, links, notes. Section colours are explained by the section
-  names. Not available in the Pele playground (CSS cannot add elements).
+  names. Not available in the Pele playground (CSS cannot add elements). Under *Legend texts* each entry can get its
+  own text (e.g. German labels); empty fields use the default.
 - **Links** (🔗): an entry becomes clickable (Mermaid `click <id> href "…"`, so it works in other Mermaid tools too) and
   is marked with ↗; links open in a new tab. Notes are kept in the code as a `%% notes …` comment.
 - **Status**: planned, in progress (outlined), done (faded), critical (red).

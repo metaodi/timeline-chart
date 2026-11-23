@@ -12,26 +12,42 @@ import { noteEntries, superscript } from './gantt-notes.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const STATUS_ORDER = ['', 'active', 'done', 'crit'];
-const STATUS_LABEL = { '': 'Planned', active: 'In progress', done: 'Done', crit: 'Critical' };
+
+/** Legend entries and their default texts (overridable per plan: `gantt.legendLabels[kind]`). */
+export const LEGEND_DEFAULTS = {
+  'status-planned': 'Planned',
+  'status-active': 'In progress',
+  'status-done': 'Done',
+  'status-crit': 'Critical',
+  milestone: 'Milestone',
+  deadline: 'Deadline',
+  link: 'Link',
+  note: 'Note (below)',
+};
 
 /**
- * Legend entries for a gantt model, in display order.
- * @returns {{ kind: string, label: string }[]}
+ * Legend entries for a gantt model, in display order, with the plan's own
+ * texts where set (`gantt.legendLabels`).
+ * @returns {{ kind: string, label: string, default: string }[]}
  */
 export function legendItems(gantt) {
   const tasks = (gantt.sections ?? []).flatMap((s) => s.tasks);
   const bars = tasks.filter((t) => t.type === 'task');
   const statuses = new Set(bars.map((t) => t.status || ''));
-  const items = [];
+  const kinds = [];
   // statuses only explain something if not everything is "planned"
   if ([...statuses].some((s) => s !== '')) {
-    for (const s of STATUS_ORDER) if (statuses.has(s)) items.push({ kind: `status-${s || 'planned'}`, label: STATUS_LABEL[s] });
+    for (const s of STATUS_ORDER) if (statuses.has(s)) kinds.push(`status-${s || 'planned'}`);
   }
-  if (tasks.some((t) => t.type === 'milestone')) items.push({ kind: 'milestone', label: 'Milestone' });
-  if (tasks.some((t) => t.type === 'deadline')) items.push({ kind: 'deadline', label: 'Deadline' });
-  if (tasks.some((t) => t.link?.trim())) items.push({ kind: 'link', label: 'Link' });
-  if (gantt.showNotes !== false && noteEntries(gantt).length) items.push({ kind: 'note', label: 'Note (below)' });
-  return items;
+  if (tasks.some((t) => t.type === 'milestone')) kinds.push('milestone');
+  if (tasks.some((t) => t.type === 'deadline')) kinds.push('deadline');
+  if (tasks.some((t) => t.link?.trim())) kinds.push('link');
+  if (gantt.showNotes !== false && noteEntries(gantt).length) kinds.push('note');
+  return kinds.map((kind) => ({
+    kind,
+    label: String(gantt.legendLabels?.[kind] ?? '').trim() || LEGEND_DEFAULTS[kind],
+    default: LEGEND_DEFAULTS[kind],
+  }));
 }
 
 const el = (name, attrs = {}, text) => {

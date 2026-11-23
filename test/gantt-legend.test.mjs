@@ -29,3 +29,13 @@ test('legend toggle defaults to on and survives normalize', () => {
   assert.equal(normalize({ mode: 'gantt' }).gantt.showLegend, true);
   assert.equal(normalize({ gantt: { showLegend: false } }).gantt.showLegend, false);
 });
+
+test('own legend texts replace the defaults; empty means default', () => {
+  const s = normalize(ganttExample('2026-01-05'));
+  s.gantt.legendLabels = { 'status-done': 'Erledigt', 'status-active': '  ', milestone: 'Meilenstein' };
+  const items = legendItems(s.gantt);
+  assert.deepEqual(items.map((i) => i.label), ['Planned', 'In progress', 'Erledigt', 'Critical', 'Meilenstein', 'Deadline']);
+  assert.equal(items.find((i) => i.kind === 'status-done').default, 'Done');
+  // normalize keeps only real texts
+  assert.deepEqual(normalize(s).gantt.legendLabels, { 'status-done': 'Erledigt', milestone: 'Meilenstein' });
+});

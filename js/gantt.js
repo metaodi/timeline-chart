@@ -70,6 +70,7 @@ export function emptyGantt() {
     rows: [...ROW_PRESETS.standard.rows], // zebra stripes of the chart rows
     showNotes: true, // numbered notes below the chart
     showLegend: true, // legend below the chart (only elements that occur)
+    legendLabels: {}, // own legend texts, e.g. { "status-done": "Erledigt" }
     layout: 'compact', // 'compact' (packed by date) | 'ordered' (one row per entry, editor order)
     excludeWeekends: false, // kept for imported charts; no UI (clean look)
     todayMarker: false,
@@ -141,6 +142,12 @@ export function normalizeGantt(g) {
   for (const k of ['showPIs', 'showSprints', 'excludeWeekends', 'todayMarker']) d[k] = Boolean(d[k]);
   d.showNotes = d.showNotes !== false;
   d.showLegend = d.showLegend !== false;
+  // own legend texts per entry kind (see LEGEND_DEFAULTS in gantt-legend.js); empty = default
+  d.legendLabels = Object.fromEntries(
+    Object.entries(d.legendLabels && typeof d.legendLabels === 'object' ? d.legendLabels : {})
+      .filter(([k, v]) => /^[a-z-]+$/.test(k) && typeof v === 'string' && v.trim())
+      .map(([k, v]) => [k, v.slice(0, 80)]),
+  );
   d.layout = d.layout === 'ordered' ? 'ordered' : 'compact';
   d.rows = [0, 1].map((i) => (isRowToken(d.rows?.[i]) ? d.rows[i].toLowerCase() : ROW_PRESETS.standard.rows[i]));
   d.pis = Array.isArray(d.pis) ? normalizePlan(d.pis) : sprintPlanFromConfig(d.calendar);

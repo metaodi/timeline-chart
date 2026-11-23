@@ -7,6 +7,7 @@ import { TASK_TYPES, STATUSES, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, sch
 import { themeVars, rowColour, themeColour } from './themes.js';
 import { sortable, moveBetween } from './drag.js';
 import { formatDate, isoDate, nextName } from './generator.js';
+import { legendItems } from './gantt-legend.js';
 
 /** The scrolling editor column on desktop; on phones the page itself scrolls. */
 export const editorScroller = () => (matchMedia('(max-width: 720px)').matches ? null : document.querySelector('.editor-pane'));
@@ -173,6 +174,25 @@ export function createGanttEditor(root, api) {
       .join('');
   }
 
+  let legendOpen = false; // remember whether the legend texts are expanded
+
+  /** Own texts for the legend entries that occur (empty = default text). */
+  function legendTextsHtml() {
+    const items = legendItems(g());
+    const rows = items.length
+      ? items
+          .map(
+            (it) => `<label class="glegend-row"><span class="muted small">${esc(it.default)}</span>
+              <input type="text" data-glegend="${it.kind}" value="${esc(g().legendLabels?.[it.kind] ?? '')}" placeholder="${esc(it.default)}" aria-label="Legend text for ${esc(it.default)}" /></label>`,
+          )
+          .join('')
+      : '<p class="muted small">Nothing to explain yet – the legend shows statuses, milestones, deadlines, links and notes once they are used.</p>';
+    return `<details class="glegend" data-glegend-box${legendOpen ? ' open' : ''}>
+      <summary>Legend texts</summary>
+      <div class="glegend-list">${rows}</div>
+    </details>`;
+  }
+
   /** Row stripes: preset + two colour pickers. */
   function rowsHtml() {
     const vars = themeVars(api.getState().theme);
@@ -211,6 +231,7 @@ export function createGanttEditor(root, api) {
         </div>
       </details>
       <div class="gcal-opts">${opt('showPIs', 'Show PIs')}${opt('showSprints', 'Show sprints')}${opt('showNotes', 'Notes below chart')}${opt('showLegend', 'Legend')}</div>
+      ${g().showLegend ? legendTextsHtml() : ''}
       <div class="grows">
         <span class="muted small">Order</span>
         <select data-glayout aria-label="Order of the entries">
@@ -414,6 +435,7 @@ export function createGanttEditor(root, api) {
     'toggle',
     (ev) => {
       if (ev.target.matches?.('[data-gplan]')) planOpen = ev.target.open;
+      if (ev.target.matches?.('[data-glegend-box]')) legendOpen = ev.target.open;
     },
     true,
   );
@@ -432,6 +454,13 @@ export function createGanttEditor(root, api) {
 
   root.addEventListener('input', (ev) => {
     const el = ev.target;
+    // legend texts: update the chart while typing
+    if (el.dataset.glegend) {
+      api.snapshotTyping();
+      g().legendLabels = { ...(g().legendLabels ?? {}), [el.dataset.glegend]: el.value };
+      api.update();
+      return;
+    }
     // PI / sprint names: update the chart while typing (dates do not change)
     if (el.dataset.gpfield === 'pi-name' || el.dataset.gpfield === 'sp-name') {
       api.snapshotTyping();

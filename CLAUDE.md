@@ -70,7 +70,8 @@ included). On phones both use the code's own width.
   - `from`: `prev` | `plan` | `after:<taskId>` | sprint id `sN` | `YYYY-MM-DD`
   - `duration`: `Ns` sprints / `Nw` weeks / `Nd` working days, or `''` = until `to` (sprint id or date)
   - milestones/deadlines: position in `from` (sprint → its end)
-- `layout` (`compact` | `ordered`), `rows` (stripe tokens), `showPIs`, `showSprints`, `showNotes`, `showLegend`.
+- `layout` (`compact` | `ordered`), `rows` (stripe tokens), `showPIs`, `showSprints`, `showNotes`, `showLegend`,
+  `legendLabels` (own legend texts by kind, defaults in `LEGEND_DEFAULTS` of `gantt-legend.js`).
 - Task `id` (`t…`) is stable (for `after:` refs). **In the Mermaid code** tasks are `g<section>t<index>`, sprints `sN`,
   PIs `piN` – styling, notes, links and the playground CSS address elements by these `data-id`s.
 
