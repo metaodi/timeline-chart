@@ -122,15 +122,32 @@ select {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(340px, 440px) minmax(0, 1fr);
+  --editor-default: minmax(340px, 440px);
+  /* --editor-w is set by dragging the divider (js/splitter.js) */
+  grid-template-columns: var(--editor-w-track, var(--editor-default)) 12px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas: 'edit preview' 'edit code';
-  gap: 16px;
+  grid-template-areas: 'edit split preview' 'edit split code';
+  gap: 16px 2px;
   padding: 16px;
   height: calc(100dvh - var(--topbar-h));
 }
 
+.layout[style*='--editor-w'] { --editor-w-track: clamp(280px, var(--editor-w), calc(100vw - 420px)); }
+
 .pane { min-width: 0; min-height: 0; }
+
+/* Divider between editor and preview: drag to resize the editor. */
+.splitter {
+  grid-area: split; position: relative; cursor: col-resize; touch-action: none; border-radius: 6px;
+}
+.splitter::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 5px; width: 2px; border-radius: 1px;
+  background: var(--border); opacity: 0; transition: opacity 0.15s, background 0.15s;
+}
+.splitter:hover::after, .splitter:focus-visible::after, body.resizing .splitter::after { opacity: 1; }
+body.resizing .splitter::after { background: var(--accent); }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing .preview { pointer-events: none; }
 .editor-pane { grid-area: edit; overflow-y: auto; padding-right: 4px; }
 .preview-pane { grid-area: preview; display: flex; flex-direction: column; }
 .code-pane { grid-area: code; display: flex; flex-direction: column; max-height: 34vh; }
@@ -330,7 +347,7 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
 /* Wide view (desktop): the chart gets the whole width, the editor is hidden. */
 @media (min-width: 721px) {
   body.wide .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'preview' 'code'; }
-  body.wide .editor-pane { display: none; }
+  body.wide .editor-pane, body.wide .splitter { display: none; }
 }
 .placeholder { text-align: center; margin-top: 80px; }
 
@@ -382,9 +399,7 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
 /* ---------------------------------------------------------------- tablet: stack preview & code below the editor */
 
 @media (max-width: 1000px) and (min-width: 721px) {
-  .layout {
-    grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
-  }
+  .layout { --editor-default: minmax(300px, 380px); }
 }
 
 /* ---------------------------------------------------------------- phone: one view at a time, bottom tab bar */

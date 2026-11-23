@@ -4,6 +4,7 @@ import timeline from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/diagrams
 import gantt from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/diagrams/gantt.js';
 import { createGanttEditor, editorScroller } from './gantt-editor.js';
 import { sortable, moveBetween } from './drag.js';
+import { bindSplitter } from './splitter.js';
 import { styleGantt } from './gantt-style.js';
 import { peleCss } from './pele-css.js';
 import { alignTitle } from './svg-title.js';
@@ -765,6 +766,12 @@ function bindToolbar() {
   } catch {
     /* optional */
   }
+
+  // Drag the divider to make the editor wider or narrower (a Gantt chart fills the preview width).
+  bindSplitter($('.layout'), $('#splitter'), $('#pane-edit'), () => {
+    $$('#tree textarea, #gantt-editor textarea').forEach(autosize);
+    if (currentCode && state.mode === 'gantt') renderPreview();
+  });
 
   $$('.tabbar button').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
 }
