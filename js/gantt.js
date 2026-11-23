@@ -10,6 +10,12 @@
  *   showSprints: boolean,      // a "Sprints" row
  *   excludeWeekends: boolean,
  *   todayMarker: boolean,
+ *   endDates: '' | 'all' | 'some', // end date (with a dot) after bars and milestones: none, all, chosen tasks
+ *   endDateFormat: 'dmy' | 'iso',
+ *   axisFormat: string,   // time axis labels (Mermaid axisFormat, strftime: "%m.%Y"); '' = "%d %b"
+ *   tickInterval: string, // ticks + grid lines ("1month", "2week", "3day"); '' = one per sprint (or Pele's choice)
+ *   minWidth: number,     // chart width range in px (Mermaid useWidth); 0 = automatic (1000 / 4000)
+ *   maxWidth: number,     //   min = max: fixed width. A range also stops the preview from widening the chart.
  *   sections: [{ name, color, tasks: Task[] }],   // color: 0 = automatic, 1..8 = theme colour
  * }
  * Task = {
@@ -17,6 +23,8 @@
  *   name: string,
  *   type: 'task' | 'milestone' | 'deadline',
  *   status: '' | 'done' | 'active' | 'crit',
+ *   look: '' | 'hatch' | 'option',  // bars only: hatched (independent work package) / dashed outline (option)
+ *   endDate: '' | 'show' | 'hide',  // per task: end date shown / hidden regardless of the chart's `endDates`
  *   from: Start,         // where a bar starts / where a milestone or deadline sits
  *   duration: string,    // "2s" sprints, "3w" weeks, "10d" working days; "" = until `to`
  *   to: Ref,             // end when no duration is given
@@ -46,6 +54,58 @@ export const STATUSES = [
   { id: 'crit', label: 'Critical' },
 ];
 
+/** Bar looks that Mermaid can't express (kept in a comment, drawn by gantt-style.js). */
+export const LOOKS = [
+  { id: '', label: 'Solid' },
+  { id: 'hatch', label: 'Hatched (independent)' },
+  { id: 'option', label: 'Dashed (option)' },
+];
+/** Which entries show their end date (a dot after bars + the date, also next to milestones). */
+export const END_DATE_MODES = [
+  { id: '', label: 'No end dates' },
+  { id: 'all', label: 'End dates on all entries' },
+  { id: 'some', label: 'End dates on chosen entries (📅)' },
+];
+/** Formats of the end dates. */
+export const END_DATE_FORMATS = [
+  { id: 'dmy', label: '31.03.2027' },
+  { id: 'iso', label: '2027-03-31' },
+];
+
+/** Whether a task shows its end date: the chart's setting, overridden per task ("show" / "hide"). */
+export function showsEndDate(g, task) {
+  if (!g?.endDates || !task || task.type === 'deadline') return false;
+  return g.endDates === 'all' ? task.endDate !== 'hide' : task.endDate === 'show';
+}
+/** Default label format of the time axis. */
+export const DEFAULT_AXIS_FORMAT = '%d %b';
+/** Presets for the time axis: label format (Mermaid `axisFormat`, strftime) and tick interval ('' = automatic). */
+export const AXIS_PRESETS = [
+  { id: 'auto', label: 'Axis 05 Jan', format: '', tick: '' },
+  { id: 'month', label: 'Axis by month 01.2027', format: '%m.%Y', tick: '1month' },
+  { id: 'dmy', label: 'Axis 05.01.2027', format: '%d.%m.%Y', tick: '' },
+];
+/** Units of a custom tick interval (as Pele/Mermaid spell them). */
+export const TICK_UNITS = ['day', 'week', 'month'];
+const isTick = (t) => new RegExp(`^[1-9]\\d{0,2}(${TICK_UNITS.join('|')})$`).test(t ?? '');
+/** An axis format the grammar can hold (no line breaks, "#" or ";"). */
+export const cleanAxisFormat = (f) => String(f ?? '').replace(/[#;\r\n]/g, '').trim().slice(0, 40);
+const LOOKS_KEY = 'task-looks';
+const END_DATES_KEY = 'end-dates';
+const WIDTH_KEY = 'chart-width';
+/** Automatic chart width range and the limits a user may set (px). */
+export const AUTO_WIDTH = { min: 1000, max: 4000 };
+export const WIDTH_LIMITS = { min: 300, max: 8000, step: 50 }; // also the width slider's range
+const cleanWidth = (w) => {
+  const n = Math.round(Number(w));
+  return Number.isFinite(n) && n > 0 ? Math.max(WIDTH_LIMITS.min, Math.min(WIDTH_LIMITS.max, n)) : 0;
+};
+/** `{ minWidth, maxWidth }` within the limits (0 = automatic), swapped if min > max. */
+export function cleanWidthRange(min, max) {
+  const [a, b] = [cleanWidth(min), cleanWidth(max)];
+  return a && b && a > b ? { minWidth: b, maxWidth: a } : { minWidth: a, maxWidth: b };
+}
+const END_DATE_TASKS_KEY = 'end-date-tasks';
 const CAL_KEY = 'sprint-calendar';
 const PLAN_KEY = 'sprint-plan';
 const COLOURS_KEY = 'section-colours';
@@ -74,6 +134,12 @@ export function emptyGantt() {
     layout: 'compact', // 'compact' (packed by date) | 'ordered' (one row per entry, editor order)
     excludeWeekends: false, // kept for imported charts; no UI (clean look)
     todayMarker: false,
+    endDates: '', // see END_DATE_MODES
+    endDateFormat: 'dmy', // see END_DATE_FORMATS
+    axisFormat: '', // '' = DEFAULT_AXIS_FORMAT
+    tickInterval: '', // '' = automatic
+    minWidth: 0, // chart width range in px; 0 = automatic
+    maxWidth: 0,
     sections: [],
   };
 }
@@ -149,6 +215,14 @@ export function normalizeGantt(g) {
       .map(([k, v]) => [k, v.slice(0, 80)]),
   );
   d.layout = d.layout === 'ordered' ? 'ordered' : 'compact';
+  // (first version: endDates was the format, meaning "all")
+  if (END_DATE_FORMATS.some((f) => f.id === d.endDates)) [d.endDateFormat, d.endDates] = [d.endDates, 'all'];
+  d.endDates = END_DATE_MODES.some((f) => f.id === d.endDates) ? d.endDates : '';
+  d.endDateFormat = END_DATE_FORMATS.some((f) => f.id === d.endDateFormat) ? d.endDateFormat : 'dmy';
+  d.axisFormat = cleanAxisFormat(d.axisFormat);
+  if (d.axisFormat === DEFAULT_AXIS_FORMAT) d.axisFormat = '';
+  d.tickInterval = isTick(d.tickInterval) ? d.tickInterval : '';
+  Object.assign(d, cleanWidthRange(d.minWidth, d.maxWidth));
   d.rows = [0, 1].map((i) => (isRowToken(d.rows?.[i]) ? d.rows[i].toLowerCase() : ROW_PRESETS.standard.rows[i]));
   d.pis = Array.isArray(d.pis) ? normalizePlan(d.pis) : sprintPlanFromConfig(d.calendar);
   // every sprint needs a unique id (tasks reference them)
@@ -159,6 +233,7 @@ export function normalizeGantt(g) {
   }
   const types = TASK_TYPES.map((t) => t.id);
   const statuses = STATUSES.map((s) => s.id);
+  const looks = LOOKS.map((l) => l.id);
   d.sections = Array.isArray(d.sections)
     ? d.sections.map((s) => ({
         name: String(s?.name ?? ''),
@@ -169,6 +244,8 @@ export function normalizeGantt(g) {
               name: String(t?.name ?? ''),
               type: types.includes(t?.type) ? t.type : 'task',
               status: statuses.includes(t?.status) ? t.status : '',
+              look: looks.includes(t?.look) ? t.look : '',
+              endDate: ['show', 'hide'].includes(t?.endDate) ? t.endDate : '',
               from: String(t?.from || 'prev'),
               duration: /^\d+[swd]$/.test(t?.duration ?? '') ? t.duration : '',
               note: String(t?.note ?? ''), // details: tooltip + footnote (gantt-notes.js)
@@ -341,21 +418,41 @@ export function milestoneSpan(name, pxPerDay) {
   return Math.max(1, Math.min(90, Math.ceil(px / Math.max(pxPerDay, 0.1))));
 }
 /**
- * Chart width (Mermaid `useWidth`): about 40px per week, so long plans get wider
- * instead of cramped. Between 1000 and 4000px.
+ * The chart's width range in px: the user's min / max (`g.minWidth`, `g.maxWidth`),
+ * else 1000 – 4000. `custom`: the user set at least one bound.
  */
-export function ganttWidth(cal, dates) {
-  return ganttScale(cal, dates).width;
+export function widthRange(g) {
+  const min = cleanWidth(g?.minWidth);
+  const max = cleanWidth(g?.maxWidth);
+  const hi = max || Math.max(AUTO_WIDTH.max, min);
+  const lo = Math.min(min || AUTO_WIDTH.min, hi);
+  return { min: lo, max: hi, custom: Boolean(min || max) };
+}
+
+/** Text next to the width slider: "Auto · 1000 – 4000 px", "1200 – 2000 px", "1600 px fixed". */
+export function widthLabel(g) {
+  const { min, max, custom } = widthRange(g);
+  if (!custom) return `Auto · ${min} – ${max} px`;
+  return min === max ? `${min} px fixed` : `${min} – ${max} px`;
+}
+
+/**
+ * Chart width (Mermaid `useWidth`): about 40px per week, so long plans get wider
+ * instead of cramped. Within `widthRange(g)` (default 1000 – 4000px).
+ */
+export function ganttWidth(cal, dates, g) {
+  return ganttScale(cal, dates, g).width;
 }
 
 /** Chart width and its approximate scale (pixels per day on the time axis). */
-export function ganttScale(cal, dates) {
+export function ganttScale(cal, dates, g) {
+  const range = widthRange(g);
   const all = [...cal.sprints, ...dates.flat().filter(Boolean)];
-  if (!all.length) return { width: 1000, pxPerDay: 10 };
+  if (!all.length) return { width: Math.max(range.min, Math.min(range.max, 1000)), pxPerDay: 10 };
   const start = Math.min(...all.map((d) => d.start.getTime()));
   const end = Math.max(...all.map((d) => d.end.getTime()));
   const days = (end - start) / 864e5 + 1;
-  const width = Math.max(1000, Math.min(4000, Math.round((260 + (days / 7) * 40) / 10) * 10));
+  const width = Math.max(range.min, Math.min(range.max, Math.round((260 + (days / 7) * 40) / 10) * 10));
   // ~180px for section names and padding; start/end bound the time axis
   return { width, pxPerDay: (width - 180) / days, start, end };
 }
@@ -366,14 +463,17 @@ export function toGanttMermaid(t, frontmatter = []) {
   const fm = [...frontmatter];
   const at = fm.indexOf('  gantt:');
   const compact = g.layout !== 'ordered';
-  const scale = ganttScale(cal, dates);
+  const scale = ganttScale(cal, dates, g);
   if (at >= 0) fm.splice(at + (compact ? 2 : 1), 0, `    useWidth: ${scale.width}`);
   const out = [...fm, 'gantt'];
   if (t.title?.trim()) out.push(`  title ${t.title.replace(/\s*\n\s*/g, ' ').trim()}`);
   if (t.accTitle?.trim()) out.push(`  accTitle: ${t.accTitle.trim()}`);
   if (t.accDescr?.trim()) out.push(`  accDescr: ${t.accDescr.replace(/\s*\n\s*/g, ' ').trim()}`);
-  out.push('  dateFormat YYYY-MM-DD', '  axisFormat %d %b');
-  if (cal.sprints.length) out.push(`  tickInterval ${g.calendar.sprintWeeks}week`, '  weekday monday');
+  out.push('  dateFormat YYYY-MM-DD', `  axisFormat ${cleanAxisFormat(g.axisFormat) || DEFAULT_AXIS_FORMAT}`);
+  // ticks (and grid lines): as chosen, or one per sprint
+  const tick = isTick(g.tickInterval) ? g.tickInterval : cal.sprints.length ? `${g.calendar.sprintWeeks}week` : '';
+  if (tick) out.push(`  tickInterval ${tick}`);
+  if (tick.endsWith('week')) out.push('  weekday monday');
   if (g.excludeWeekends) out.push('  excludes weekends');
   out.push('  inclusiveEndDates');
   if (!g.todayMarker) out.push('  todayMarker off');
@@ -383,11 +483,11 @@ export function toGanttMermaid(t, frontmatter = []) {
     const plan = (g.pis ?? []).map((p) => ({ id: p.id, name: p.name, sprints: p.sprints.map((x) => [x.id, x.name, x.weeks]) }));
     out.push(`  %% ${PLAN_KEY} ${JSON.stringify(plan)}`);
     if (g.showPIs && cal.pis.length) {
-      out.push(`  section ${escapeGanttText(g.calendar.piPrefix || 'PI')}s`);
+      out.push(`  section ${escapeGanttText(plural(g.calendar.piPrefix || 'PI'))}`);
       for (const pi of cal.pis) out.push(`    ${escapeGanttText(pi.name)} : ${pi.id}, ${isoDate(pi.start)}, ${isoDate(pi.end)}`);
     }
     if (g.showSprints) {
-      out.push(`  section ${escapeGanttText(g.calendar.sprintPrefix || 'Sprint')}s`);
+      out.push(`  section ${escapeGanttText(plural(g.calendar.sprintPrefix || 'Sprint'))}`);
       // Short labels ("1", "2", "IP") fit inside the bars when sprints sit side by side.
       for (const s of cal.sprints) out.push(`    ${escapeGanttText(s.short)} : ${s.id}, ${isoDate(s.start)}, ${isoDate(s.end)}`);
     }
@@ -399,6 +499,16 @@ export function toGanttMermaid(t, frontmatter = []) {
   const notes = {};
   g.sections.forEach((s, si) => s.tasks.forEach((t, ti) => t.note?.trim() && (notes[`g${si}t${ti}`] = t.note.trim())));
   if (Object.keys(notes).length) out.push(`  %% ${NOTES_KEY} ${JSON.stringify(notes)}${g.showNotes === false ? ' hidden' : ''}`);
+  // hatched / dashed bars ({"g0t1": "hatch"}) and end dates: drawn by this app only
+  const looks = {};
+  g.sections.forEach((s, si) => s.tasks.forEach((t, ti) => t.look && t.type === 'task' && (looks[`g${si}t${ti}`] = t.look)));
+  if (Object.keys(looks).length) out.push(`  %% ${LOOKS_KEY} ${JSON.stringify(looks)}`);
+  const { minWidth, maxWidth } = cleanWidthRange(g.minWidth, g.maxWidth);
+  if (minWidth || maxWidth) out.push(`  %% ${WIDTH_KEY} ${minWidth || 'auto'} ${maxWidth || 'auto'}`);
+  if (g.endDates) out.push(`  %% ${END_DATES_KEY} ${g.endDates} ${g.endDateFormat || 'dmy'}`);
+  const endDateTasks = {};
+  g.sections.forEach((s, si) => s.tasks.forEach((t, ti) => ['show', 'hide'].includes(t.endDate) && t.type !== 'deadline' && (endDateTasks[`g${si}t${ti}`] = t.endDate)));
+  if (Object.keys(endDateTasks).length) out.push(`  %% ${END_DATE_TASKS_KEY} ${JSON.stringify(endDateTasks)}`);
   g.sections.forEach((s, si) => {
     const lines = s.tasks
       .map((task, ti) => {
@@ -409,7 +519,9 @@ export function toGanttMermaid(t, frontmatter = []) {
           // keep the range inside the chart, or Pele would stretch the time axis
           const d = when.start.getTime();
           const room = Math.min((d - scale.start) / 864e5, (scale.end - d) / 864e5 + 1);
-          span = Math.min(milestoneSpan(task.name, scale.pxPerDay), Math.floor(room));
+          // (with end dates the label also holds the date)
+          const label = showsEndDate(g, task) ? `${task.name} 00.00.0000` : task.name;
+          span = Math.min(milestoneSpan(label, scale.pxPerDay), Math.floor(room));
         }
         return taskLine(task, when, `g${si}t${ti}`, span);
       })
@@ -484,6 +596,8 @@ export function parseGanttMermaid(code) {
   let seenHeader = false;
   let colours = [];
   let notes = {};
+  let looks = {};
+  let endDateTasks = {};
   const links = {};
 
   String(code)
@@ -502,6 +616,29 @@ export function parseGanttMermaid(code) {
             if (/\s+hidden$/.test(body)) g.showNotes = false;
           } catch {
             res.warnings.push(`Line ${i + 1}: could not read the notes`);
+          }
+        } else if (line.startsWith(`%% ${LOOKS_KEY} `)) {
+          try {
+            looks = JSON.parse(line.slice(`%% ${LOOKS_KEY} `.length));
+          } catch {
+            res.warnings.push(`Line ${i + 1}: could not read the bar looks`);
+          }
+        } else if (line.startsWith(`%% ${END_DATE_TASKS_KEY} `)) {
+          try {
+            endDateTasks = JSON.parse(line.slice(`%% ${END_DATE_TASKS_KEY} `.length));
+          } catch {
+            res.warnings.push(`Line ${i + 1}: could not read the end dates of the tasks`);
+          }
+        } else if (line.startsWith(`%% ${WIDTH_KEY} `)) {
+          const [min, max] = line.slice(`%% ${WIDTH_KEY} `.length).trim().split(/\s+/);
+          Object.assign(g, cleanWidthRange(min, max));
+        } else if (line.startsWith(`%% ${END_DATES_KEY} `)) {
+          for (const w of line.slice(`%% ${END_DATES_KEY} `.length).trim().split(/\s+/)) {
+            if (END_DATE_MODES.some((x) => x.id && x.id === w)) g.endDates = w;
+            else if (END_DATE_FORMATS.some((x) => x.id === w)) {
+              g.endDateFormat = w;
+              if (!g.endDates) g.endDates = 'all'; // "%% end-dates dmy" (first version)
+            }
           }
         } else if (line.includes(ROWS_KEY)) {
           const rows = line.slice(line.indexOf(ROWS_KEY) + ROWS_KEY.length).split(',').map((x) => x.trim());
@@ -531,6 +668,8 @@ export function parseGanttMermaid(code) {
         if (m[1].trim() !== 'YYYY-MM-DD') res.warnings.push(`Line ${i + 1}: only dateFormat YYYY-MM-DD is supported`);
       } else if (/^excludes\s+.*weekends/i.test(line)) g.excludeWeekends = true;
       else if (/^todayMarker\s+off/i.test(line)) g.todayMarker = false;
+      else if ((m = line.match(/^axisFormat\s+(.+)$/i))) g.axisFormat = cleanAxisFormat(m[1]) === DEFAULT_AXIS_FORMAT ? '' : cleanAxisFormat(m[1]);
+      else if ((m = line.match(/^tickInterval\s+(\S+)/i))) g.tickInterval = isTick(m[1]) ? m[1] : '';
       else if ((m = line.match(/^click\s+(\S+)\s+href\s+"([^"]*)"/i))) {
         for (const id of m[1].split(',')) links[id.trim()] = m[2];
       } else if (/^(axisFormat|tickInterval|weekday|weekend|inclusiveEndDates|includes|excludes|topAxis|displayMode|click|classDef|class)\b/i.test(line)) {
@@ -603,11 +742,36 @@ export function parseGanttMermaid(code) {
     sec.tasks.forEach((t, ti) => {
       t.note = String(notes[`g${si}t${ti}`] ?? '');
       t.link = String(links[`g${si}t${ti}`] ?? '');
+      t.look = t.type === 'task' && LOOKS.some((l) => l.id && l.id === looks[`g${si}t${ti}`]) ? looks[`g${si}t${ti}`] : '';
+      t.endDate = ['show', 'hide'].includes(endDateTasks[`g${si}t${ti}`]) ? endDateTasks[`g${si}t${ti}`] : '';
     }),
   );
   snapToSprints(g);
+  // the app writes one tick per sprint by itself: keep that automatic (follows the sprint length)
+  if (calendarOf(g).sprints.length && g.tickInterval === `${g.calendar.sprintWeeks}week`) g.tickInterval = '';
   if (!seenHeader) res.warnings.unshift('No "gantt" header found');
   return res;
+}
+
+/**
+ * Row label for the PI / sprint row: the prefix in the plural ("Sprints", "PIs").
+ * German prefixes get their German plural ("Schritt" -> "Schritte", "Phase" -> "Phasen").
+ */
+const GERMAN_PLURALS = { schritt: 'Schritte', phase: 'Phasen', arbeitspaket: 'Arbeitspakete', etappe: 'Etappen' };
+export function plural(word) {
+  const w = String(word).trim();
+  const german = GERMAN_PLURALS[w.toLowerCase()];
+  if (german) return w[0] === w[0].toLowerCase() ? german.toLowerCase() : german;
+  return /s$/i.test(w) ? w : `${w}s`;
+}
+
+/** End date as drawn after a bar or milestone ("31.03.2027" or "2027-03-31"). */
+export function formatEndDate(date, format) {
+  if (!date || !format) return '';
+  const iso = isoDate(date);
+  if (format === 'iso') return iso;
+  const [y, m, d] = iso.split('-');
+  return `${d}.${m}.${y}`;
 }
 
 /** Replace dates that fall exactly on sprint boundaries with sprint references. */

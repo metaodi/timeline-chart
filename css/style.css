@@ -122,15 +122,32 @@ select {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(340px, 440px) minmax(0, 1fr);
+  --editor-default: minmax(340px, 440px);
+  /* --editor-w is set by dragging the divider (js/splitter.js) */
+  grid-template-columns: var(--editor-w-track, var(--editor-default)) 12px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas: 'edit preview' 'edit code';
-  gap: 16px;
+  grid-template-areas: 'edit split preview' 'edit split code';
+  gap: 16px 2px;
   padding: 16px;
   height: calc(100dvh - var(--topbar-h));
 }
 
+.layout[style*='--editor-w'] { --editor-w-track: clamp(280px, var(--editor-w), calc(100vw - 420px)); }
+
 .pane { min-width: 0; min-height: 0; }
+
+/* Divider between editor and preview: drag to resize the editor. */
+.splitter {
+  grid-area: split; position: relative; cursor: col-resize; touch-action: none; border-radius: 6px;
+}
+.splitter::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 5px; width: 2px; border-radius: 1px;
+  background: var(--border); opacity: 0; transition: opacity 0.15s, background 0.15s;
+}
+.splitter:hover::after, .splitter:focus-visible::after, body.resizing .splitter::after { opacity: 1; }
+body.resizing .splitter::after { background: var(--accent); }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing .preview { pointer-events: none; }
 .editor-pane { grid-area: edit; overflow-y: auto; padding-right: 4px; }
 .preview-pane { grid-area: preview; display: flex; flex-direction: column; }
 .code-pane { grid-area: code; display: flex; flex-direction: column; max-height: 34vh; }
@@ -256,6 +273,41 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
 .gcal-opts { display: flex; gap: 16px; flex-wrap: wrap; }
 .grows { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .grows select { min-height: 30px; padding: 2px 6px; font-size: 0.85rem; }
+.gaxis input[type='text'] { width: 9em; min-height: 30px; padding: 2px 6px; font: inherit; font-size: 0.85rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.gaxis input[type='number'] { width: 4.5em; min-height: 30px; padding: 2px 6px; font: inherit; font-size: 0.85rem; }
+/* Width slider: two range inputs on one track; only the thumbs take pointer events */
+.range2 { --thumb: 18px; position: relative; flex: 1 1 140px; min-width: 120px; max-width: 220px; height: 34px; }
+.range2::before, .range2::after {
+  content: ''; position: absolute; top: 50%; height: 4px; border-radius: 2px; transform: translateY(-50%);
+}
+.range2::before { left: calc(var(--thumb) / 2); right: calc(var(--thumb) / 2); background: var(--border); }
+.range2::after {
+  left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--lo));
+  right: calc(var(--thumb) / 2 + (100% - var(--thumb)) * (1 - var(--hi)));
+  min-width: 2px; background: var(--accent);
+}
+.range2 input[type='range'] {
+  position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0;
+  background: none; pointer-events: none; -webkit-appearance: none; appearance: none;
+}
+.range2 input[data-gwidth='min'] { z-index: calc(1 + var(--min-z)); }
+.range2 input[type='range']::-webkit-slider-runnable-track { background: none; border: 0; height: 100%; }
+.range2 input[type='range']::-moz-range-track { background: none; border: 0; }
+.range2 input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; pointer-events: auto; cursor: grab; position: relative; z-index: 2;
+  width: var(--thumb); height: var(--thumb); margin-top: calc((34px - var(--thumb)) / 2); border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--accent); box-shadow: var(--shadow);
+}
+.range2 input[type='range']::-moz-range-thumb {
+  pointer-events: auto; cursor: grab; width: var(--thumb); height: var(--thumb); box-sizing: border-box;
+  border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); box-shadow: var(--shadow);
+}
+.range2 input[type='range']:focus-visible { outline: none; }
+.range2 input[type='range']:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.range2 input[type='range']:focus-visible::-moz-range-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gwidth-val { white-space: nowrap; font-variant-numeric: tabular-nums; }
+#png-size { min-height: 30px; padding: 2px 6px; font-size: 0.85rem; }
+#png-width { width: 6em; min-height: 30px; padding: 2px 6px; font: inherit; font-size: 0.85rem; }
 .grows input[type='color'] {
   width: 34px; height: 28px; padding: 2px; cursor: pointer;
   border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
@@ -328,7 +380,7 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
 /* Wide view (desktop): the chart gets the whole width, the editor is hidden. */
 @media (min-width: 721px) {
   body.wide .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'preview' 'code'; }
-  body.wide .editor-pane { display: none; }
+  body.wide .editor-pane, body.wide .splitter { display: none; }
 }
 .placeholder { text-align: center; margin-top: 80px; }
 
@@ -380,9 +432,7 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
 /* ---------------------------------------------------------------- tablet: stack preview & code below the editor */
 
 @media (max-width: 1000px) and (min-width: 721px) {
-  .layout {
-    grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
-  }
+  .layout { --editor-default: minmax(300px, 380px); }
 }
 
 /* ---------------------------------------------------------------- phone: one view at a time, bottom tab bar */
@@ -427,6 +477,9 @@ body[data-mode='timeline'] .gantt-only { display: none !important; }
   .gsprints { padding-left: 0; }
   .gpi input, .gsprint .weeks input { font-size: 16px; }
   .gtask-when select, .gtask-when input { font-size: 16px; min-height: 36px; }
+  .grows select, .gaxis input[type='text'], .gaxis input[type='number'],
+  #png-size, #png-width { font-size: 16px; min-height: 36px; }
+  .range2 { --thumb: 26px; max-width: none; }
 
   .tabbar {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
@@ -480,6 +533,7 @@ body.dragging .gtasks:empty, body.dragging .periods:empty, body.dragging .events
 .gnote:focus { border-style: solid; border-color: var(--accent); outline: none; }
 .glink { display: block; color: var(--accent); }
 .ibtn.has-note { opacity: 1; color: var(--accent); }
+.ibtn.off { opacity: 0.4; filter: grayscale(1); } /* e.g. end date hidden for this entry */
 @media (max-width: 720px) {
   .gnote { margin-left: 4px; width: calc(100% - 4px); font-size: 16px; }
 }

@@ -12,10 +12,15 @@ Diagrams are rendered with [Pele](https://pele.run), a fast, lightweight Mermaid
   centred (Pele default) or aligned left (applied to preview and PNG/SVG export)
 - **Responsive diagrams**: the preview re-lays out to the available width; on narrow screens a wide horizontal
   timeline switches to vertical automatically (toggle "Responsive"). Pinch/scroll zoom is built in.
+- **Resizable editor** (desktop): drag the divider between editor and preview (or focus it and use ←/→, Shift for
+  bigger steps) to make the editor wider while editing and narrower to look at the chart; double-click resets it.
+  The width is remembered.
 - **Two chart types**: *Timeline* (periods with items) and *Gantt* (bars that span several sprints)
 - **Sprint / PI generator**: start date, sprint length, sprints per PI, optional IP iteration, date labels
 - **Milestones & deadlines**: every item/period has a type (🏁 milestone, ⏰ deadline, 🚀 release, ⚠️ risk, ✅ done)
-- **Export**: download PNG or SVG (optionally transparent), copy the Mermaid code
+- **Export**: download PNG or SVG (optionally transparent), copy the Mermaid code. The PNG size is picked next to
+  the PNG button: pixel density (1×–4×, default 2×) or a width in pixels (1280, 1920, 2560, 3840 or any other);
+  very large images are reduced to what browsers can draw (16.7 megapixels)
 - **Restore from an exported file**: PNG and SVG exports carry the complete app state (PNG `iTXt` chunk, SVG
   `<metadata>`). *Import → Open file…* or dropping the file on the page restores the diagram exactly as it was –
   durations, sprints, colours, notes and all settings (undo goes back). `.mmd` files are read as Mermaid code.
@@ -63,6 +68,18 @@ data.
 - **Links** (🔗): an entry becomes clickable (Mermaid `click <id> href "…"`, so it works in other Mermaid tools too) and
   is marked with ↗; links open in a new tab. Notes are kept in the code as a `%% notes …` comment.
 - **Status**: planned, in progress (outlined), done (faded), critical (red).
+- **Look** of a bar: solid, *hatched* (e.g. an independent work package) or *dashed* (an option). Mermaid has no
+  such styles, so they are kept as a `%% task-looks {…}` comment; the Pele playground CSS approximates hatching.
+- **End dates** (*Dates* next to the plan start): a dot at the end of a bar with its end date after it, and the date
+  next to a milestone – on *all entries* or only on *chosen entries*; the 📅 button of an entry hides (or shows) its
+  date. Format `31.03.2027` or `2027-03-31`. The chart grows on the right to fit them. Kept as `%% end-dates …` and
+  `%% end-date-tasks {…}` comments. See the examples *Gantt: EBP project* and *Gantt: EBP offer (steps)* (the steps
+  of an offer as "sprints" of different lengths with the prefix *Schritt*, the positions of the effort estimate as
+  sections).
+- **Time axis** (*Axis* next to the plan start): presets *05 Jan* (one tick per sprint), *by month 01.2027* (a grid
+  line per month) and *05.01.2027*, or *Custom…*: any label format (Mermaid `axisFormat`, strftime: `%d` day, `%m`
+  month, `%Y` year, `%b` Jan, `%V` week number, e.g. `KW %V`) and a tick interval in days, weeks or months (or
+  automatic: one per sprint). Both are standard Mermaid (`axisFormat`, `tickInterval`) and come back on import.
 - Change a duration or the plan start and everything that follows moves with it.
 - **Row stripes**: the alternating row colours are configurable next to the plan start – *Standard* (grey / none),
   *Subtle grey* (grey / a lighter grey mixed from the theme), *No stripes*, or two custom colours.
@@ -70,6 +87,10 @@ data.
   the preview shows it at full width and scrolls horizontally; **⤢ Wide** hides the editor so the chart can use the
   whole window. PNG/SVG exports have the same width as the preview (so the wide view gives a wide export). On phones
   it scales down (zoom for details) and exports use the chart's own width.
+  The **Width** slider (plan card, two handles, 300–8000px) sets your own range instead of 1000–4000: the chart grows
+  with the plan but stays within it, and the desktop preview widens it only up to the maximum. Both handles on the
+  same value = fixed width (preview and export alike), e.g. for a slide; **Auto** goes back to the automatic range.
+  Kept as `%% chart-width <min> <max>` (`auto` for a bound left automatic).
 - **Colours**: PIs are black and sprints grey (in dark themes: light), so colour is left to the sections. Each section
   (e.g. a category of work) has its own colour: automatic (never red, which means *critical*) or chosen with the
   colour dot in the section header.
@@ -102,7 +123,7 @@ Any static file server works; ES modules just need to be served over HTTP rather
 ```
 ---
 config:
-  theme: forest            # default | neutral | dark | forest | base
+  theme: forest            # default | neutral | dark | forest | base (app-only themes: see below)
   timeline:
     disableMulticolor: true
 ---
@@ -122,7 +143,9 @@ Themes: Pele styles diagrams with CSS variables, so the theme menu applies colou
 preview and bakes them into SVG/PNG exports. On SVG export every `var(...)` is replaced by its concrete colour and the
 background is a real rectangle (`js/svg-vars.js`), so the file looks the same in programs without CSS-variable support
 (Inkscape, Illustrator, PowerPoint, …). The matching Mermaid theme name is written into the code's frontmatter so the
-diagram looks similar in other Mermaid tools.
+diagram looks similar in other Mermaid tools. App-only themes such as **EBP** (EBP red, light red for work packages,
+blue-grey for client approvals, critical items in EBP red, square bars) write the closest Mermaid theme plus a YAML comment
+(`# timeline-builder theme: ebp`) that the importer reads back.
 
 Mermaid has no native milestone/deadline concept in timelines, so item types are stored as an emoji prefix
 (e.g. `🏁 Go-live`). That keeps them visible in the chart and lets them survive copy & import.

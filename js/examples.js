@@ -52,8 +52,120 @@ export function ganttExample(startDate = nextMonday()) {
   };
 }
 
+/**
+ * Project schedule in the EBP style: EBP theme, one row per entry, end dates,
+ * a hatched independent work package and a dashed option (fixed dates).
+ */
+export function ebpExample() {
+  const task = (id, name, from, to, extra = {}) => ({ id, name, type: 'task', status: '', from, duration: '', to, ...extra });
+  const point = (id, name, from) => ({ id, name, type: 'milestone', status: 'crit', from, duration: '', to: '' });
+  return {
+    mode: 'gantt',
+    theme: 'ebp',
+    title: 'Zeitplan',
+    titleAlign: 'left',
+    gantt: {
+      calendar: { startDate: '' },
+      pis: [],
+      showPIs: false,
+      showSprints: false,
+      layout: 'ordered',
+      rows: ['none', 'none'],
+      endDates: 'all',
+      endDateFormat: 'dmy',
+      axisFormat: '%m.%Y',
+      tickInterval: '1month',
+      sections: [
+        { name: 'Start', color: 4, tasks: [point('start', 'Mandatsbeginn', '2026-10-01')] },
+        {
+          name: 'Arbeitspakete',
+          color: 1,
+          tasks: [
+            task('cat', 'Symbolkatalog', '2026-10-15', '2026-11-09'),
+            task('lines', 'Orientierung der Linien', '2026-10-15', '2026-12-07'),
+            task('ocr', 'Texterkennung und Zuordnung', '2026-11-02', '2027-03-31', { look: 'hatch', note: 'Unabhängiges Arbeitspaket' }),
+            task('test', 'Netzsegmentierung Testgebiet', '2026-12-01', '2027-04-30'),
+            task('vec', 'Vektorisierung Geländekarte (inkl. Labelling)', '2027-02-01', '2027-07-31'),
+            task('net', 'Netzsegmentierung', '2027-05-03', '2027-09-30'),
+            task('sym', 'Symbolisierung der Vektordaten', '2027-10-01', '2027-10-31', { look: 'option', note: 'Option' }),
+          ],
+        },
+        {
+          name: 'Freigabe Auftraggeber',
+          color: 2,
+          tasks: [
+            task('ok1', 'Freigabe: Orientierung der Linien', '2026-12-08', '2026-12-31'),
+            task('ok2', 'Freigabe: Netzsegmentierung Testgebiet', '2027-05-03', '2027-05-31'),
+          ],
+        },
+        { name: 'Abnahme', color: 4, tasks: [point('done', 'Abnahme vektorisierte Daten', '2027-11-01')] },
+      ],
+    },
+  };
+}
+
+/**
+ * Offer in the EBP style: the steps of the approach are "sprints" of different
+ * lengths (prefix "Schritt"), the positions of the effort estimate are sections.
+ * Durations refer to steps, so changing a step's length moves the plan.
+ */
+export function ebpOfferExample() {
+  const task = (id, name, from, duration, extra = {}) => ({ id, name, type: 'task', status: '', from, duration, to: '', ...extra });
+  const point = (id, name, from, extra = {}) => ({ id, name, type: 'milestone', status: '', from, duration: '', to: '', ...extra });
+  const step = (n, weeks) => ({ id: `s${n}`, name: `Schritt ${n}`, weeks });
+  return {
+    mode: 'gantt',
+    theme: 'ebp',
+    title: 'UX/UI-Konzeption Datenbezug-Applikation – Vorgehen',
+    titleAlign: 'left',
+    gantt: {
+      calendar: { startDate: '2026-11-30', sprintWeeks: 1, sprintCount: 5, sprintsPerPI: 5, ipIteration: false, firstSprint: 1, firstPI: '1', sprintPrefix: 'Schritt', piPrefix: 'Phase' },
+      // one group without a name = steps without a phase
+      pis: [{ id: 'pi1', name: '', sprints: [step(1, 1), step(2, 1), step(3, 1), step(4, 2), step(5, 1)] }],
+      showPIs: false,
+      showSprints: true,
+      layout: 'ordered',
+      rows: ['none', 'none'],
+      endDates: 'all',
+      endDateFormat: 'dmy',
+      axisFormat: '%d.%m.%Y',
+      sections: [
+        {
+          name: '1 Konzeption und Machbarkeit',
+          color: 1,
+          tasks: [
+            task('prep', '1.1 Vorbereitung und erster Konzeptvorschlag', 'plan', '1s', { note: '1 Personentag' }),
+            point('kick', 'Kick-off', 's1', { status: 'crit' }),
+            task('feas', '1.2 Prüfung technische Machbarkeit (begleitend)', 'plan', '', { to: 's2', look: 'hatch', note: '1 Personentag – prüft das Konzept gegen die Daten-API; Erkenntnisse fliessen laufend ins Design ein' }),
+            task('ux1', '1.3 UI-Design, Bedienlogik, 1. Überarbeitung', 's2', '1s', { note: '2.5 Personentage für beide Überarbeitungsrunden' }),
+            task('ux2', '1.3 2. Überarbeitung', 's4', '1s'),
+            task('hand', '1.4 Abschluss und Übergabe', 's5', '1s', { note: '0.5 Personentage' }),
+          ],
+        },
+        {
+          name: '2 Option',
+          color: 1,
+          tasks: [task('hall', '2 Hallway-Test (Option)', 's3', '1s', { look: 'option', note: '1 Personentag, vorab mit dem Auftraggeber abgestimmt' })],
+        },
+        {
+          name: 'Auftraggeber',
+          color: 2,
+          tasks: [
+            task('fb1', 'Gebündelte Rückmeldungen 1. Überarbeitung', 's3', '1s'),
+            task('fb2', 'Gebündelte Rückmeldungen 2. Überarbeitung', 'after:ux2', '3d'),
+            point('ok', 'Designfreigabe', 's5', { status: 'crit' }),
+          ],
+        },
+        { name: '3 Projektleitung', color: 3, tasks: [task('pm', '3 Projektleitung', 'plan', '', { to: 's5', note: '1 Personentag' })] },
+      ],
+    },
+  };
+}
+
 export const EXAMPLES = {
   'Gantt: PI roadmap (durations)': () => ganttExample(),
+  'Gantt: EBP project': () => ebpExample(),
+  'Gantt: EBP offer (steps)': () => ebpOfferExample(),
   'PI plan (SAFe, sprints per PI)': `timeline
   title ART Phoenix – PI 2026.1
   section PI 2026.1 <br> 5 Jan – 13 Mar

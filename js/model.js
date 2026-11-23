@@ -17,7 +17,7 @@
  * {
  *   title: string,
  *   direction: 'LR' | 'TD',
- *   theme: 'default' | 'neutral' | 'dark' | 'forest' | 'base',
+ *   theme: 'default' | 'neutral' | 'dark' | 'forest' | 'base' | 'ebp',
  *   disableMulticolor: boolean,
  *   accTitle: string,
  *   accDescr: string,
@@ -30,11 +30,15 @@
  * Line breaks inside any text are stored as "\n" and written as <br>.
  */
 
+import { cleanPngSize, DEFAULT_PNG_SIZE } from './export.js';
 import { emptyGantt, normalizeGantt, toGanttMermaid, isGanttEmpty } from './gantt.js';
+import { mermaidTheme } from './themes.js';
 
 export const MODES = ['timeline', 'gantt'];
 export const DIRECTIONS = ['LR', 'TD'];
-export const THEMES = ['default', 'neutral', 'dark', 'forest', 'base'];
+export const THEMES = ['default', 'neutral', 'dark', 'forest', 'base', 'ebp'];
+/** YAML comment in the frontmatter naming an app theme that Mermaid doesn't know (read back by the parser). */
+export const APP_THEME_KEY = '# timeline-builder theme:';
 
 /**
  * Item types. Mermaid timelines have no native milestone/deadline concept, so a
@@ -79,6 +83,7 @@ export function emptyTimeline() {
     theme: 'default',
     disableMulticolor: false,
     titleAlign: 'center', // 'center' | 'left' (applied to the rendered SVG, not part of Mermaid)
+    pngSize: DEFAULT_PNG_SIZE, // PNG export: pixel density ("2x") or target width ("1920px"), see export.js
     accTitle: '',
     accDescr: '',
     periods: [],
@@ -117,6 +122,7 @@ export function normalize(data) {
     : [];
   for (const k of ['title', 'accTitle', 'accDescr']) d[k] = String(d[k] ?? '');
   d.titleAlign = d.titleAlign === 'left' ? 'left' : 'center';
+  d.pngSize = cleanPngSize(d.pngSize) || DEFAULT_PNG_SIZE;
   return d;
 }
 
@@ -161,7 +167,11 @@ function escapeLine(text) {
 
 function frontmatter(t) {
   const out = [];
-  if (t.theme !== 'default') out.push(`  theme: ${t.theme}`);
+  if (t.theme !== 'default') {
+    const mermaid = mermaidTheme(t.theme);
+    out.push(`  theme: ${mermaid}`);
+    if (mermaid !== t.theme) out.push(`  ${APP_THEME_KEY} ${t.theme}`);
+  }
   if (t.disableMulticolor && t.mode === 'timeline') out.push('  timeline:', '    disableMulticolor: true');
   // Compact: bars that don't overlap share a row, so sprints sit side by side instead of a "staircase".
   // "compact": entries that don't overlap share a row (packed by start date);

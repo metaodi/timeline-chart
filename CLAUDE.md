@@ -42,6 +42,7 @@ Plain ES modules in `js/`, one global app state (plain JSON) in `app.js`, re-ren
 | `themes.js` | colour presets (Pele CSS variables), `PELE_DEFAULTS`, row colour tokens |
 | `pele-css.js` | CSS for the Pele playground's CSS tab |
 | `export.js` / `storage.js` / `drag.js` | downloads + clipboard / autosave + share links / pointer-event drag & drop |
+| `splitter.js` | draggable divider that resizes the editor column (`--editor-w` on `.layout`, kept in localStorage) |
 | `embed.js` | full app state in exports (PNG `iTXt` chunk, SVG `<metadata id="timeline-builder">`) for a 1:1 restore |
 
 ### Rendering pipeline (order matters)
@@ -55,8 +56,10 @@ post-processing on the SVG, in this order:
 4. `addLegend` – appends the legend row below the axis, grows the viewBox
 5. `addNotes` – appends footnotes below that, grows the viewBox (preview then calls `mounted.zoom.refresh()`)
 
-Export additionally: `applyVars` (theme variables on the root) and, in `svgMarkup`, `inlineCssVars` + a background
-`<rect>`. On desktop the preview widens Gantt charts to at least the preview width (`previewCode()` raises
+Export post-processes the SVG attached off screen (text widths are measured with `getComputedTextLength`). Export
+additionally: `applyVars` (theme variables on the root) and, in `svgMarkup`, `inlineCssVars` + a background
+`<rect>`. The PNG is rasterised at `state.pngSize` (`2x` density or `1920px` width, `pngScale()` in `export.js`,
+capped at 16.7 megapixels / 16384px a side for iOS). On desktop the preview widens Gantt charts to at least the preview width (`previewCode()` raises
 `useWidth`), and exports use the same `previewCode()` – the export is as wide as what the user sees (wide view
 included). On phones both use the code's own width.
 
@@ -66,12 +69,19 @@ included). On phones both use the code's own width.
   calendar, then edited freely. A PI with an empty name = sprints without PI. Dates follow from `calendar.startDate`
   and the sprint lengths.
 - `sections: [{name, color, tasks}]`; task = `{id, name, type: task|milestone|deadline, status, from, duration, to,
-  note, link}`.
+  note, link, look, endDate}` – `look`: `''` | `hatch` | `option` (bars only, drawn by `gantt-style.js`); `endDate`:
+  `''` | `show` | `hide` overrides the chart's `endDates` for this entry (`showsEndDate()`).
   - `from`: `prev` | `plan` | `after:<taskId>` | sprint id `sN` | `YYYY-MM-DD`
   - `duration`: `Ns` sprints / `Nw` weeks / `Nd` working days, or `''` = until `to` (sprint id or date)
   - milestones/deadlines: position in `from` (sprint → its end)
 - `layout` (`compact` | `ordered`), `rows` (stripe tokens), `showPIs`, `showSprints`, `showNotes`, `showLegend`,
-  `legendLabels` (own legend texts by kind, defaults in `LEGEND_DEFAULTS` of `gantt-legend.js`).
+  `legendLabels` (own legend texts by kind, defaults in `LEGEND_DEFAULTS` of `gantt-legend.js`), `endDates`
+  (`''` | `all` | `some`: dot + date after bars/milestones; the chart's viewBox grows on the right to fit),
+  `endDateFormat` (`dmy` | `iso`).
+  `minWidth` / `maxWidth` (px, 0 = automatic 1000 / 4000; `widthRange()`; UI: two-thumb slider `.range2`): bounds for `useWidth` and for the
+  desktop preview's widening (`previewCode()`); `%% chart-width <min|auto> <max|auto>`.
+  `axisFormat` (strftime, `''` = `%d %b`) and `tickInterval` (`Nday|Nweek|Nmonth`, `''` = one per sprint): written as
+  Mermaid `axisFormat` / `tickInterval`; on import a tick equal to the sprint length becomes `''` again.
 - Task `id` (`t…`) is stable (for `after:` refs). **In the Mermaid code** tasks are `g<section>t<index>`, sprints `sN`,
   PIs `piN` – styling, notes, links and the playground CSS address elements by these `data-id`s.
 
@@ -79,7 +89,8 @@ included). On phones both use the code's own width.
 
 Concrete dates only (Mermaid can't express our scheduling). Everything Mermaid can't hold goes into `%%` comments
 that the importer reads back: `%% sprint-calendar …`, `%% sprint-plan [json]`, `%% section-colours …`,
-`%% row-colours …`, `%% notes {json}`. Links use standard `click <id> href "…"`. Layout = presence of
+`%% row-colours …`, `%% notes {json}`, `%% task-looks {json}`, `%% end-dates <mode> <format>`, `%% end-date-tasks {json}`, `%% chart-width …`. App-only themes (e.g. `ebp`)
+write the closest Mermaid theme plus a YAML comment `# timeline-builder theme: …` in the frontmatter. Links use standard `click <id> href "…"`. Layout = presence of
 `displayMode: compact` in the frontmatter; `useWidth` sets the chart width. Durations/`after` rules come back as
 fixed sprints/dates on import (share links, autosave and exported PNG/SVG files keep the full state).
 
@@ -92,6 +103,8 @@ so older files still load.
 
 ## Pele facts learned the hard way
 
+- `mounted.update()` may skip re-rendering when only `%%` comments change (seen on phones, preview hidden) → the
+  preview mounts again when the code differs only in comments (`renderPreview`).
 - Pinned to `pele@1.13.0` from jsDelivr (`core.js` + only `diagrams/timeline.js` and `diagrams/gantt.js`).
 - Themed **only by CSS variables** (`--pele-bg`, `--pele-fg`, `--pele-series-1..8`, …); it ignores Mermaid `theme` and
   `disableMulticolor`. All gantt bars use the accent colour → we recolour in `gantt-style.js`.

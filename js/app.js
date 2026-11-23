@@ -4,18 +4,19 @@ import timeline from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/diagrams
 import gantt from 'https://cdn.jsdelivr.net/npm/pele@1.13.0/dist/esm/diagrams/gantt.js';
 import { createGanttEditor, editorScroller } from './gantt-editor.js';
 import { sortable, moveBetween } from './drag.js';
+import { bindSplitter } from './splitter.js';
 import { styleGantt } from './gantt-style.js';
 import { peleCss } from './pele-css.js';
 import { alignTitle } from './svg-title.js';
 import { addNotes } from './gantt-notes.js';
 import { addLegend } from './gantt-legend.js';
 import { collapseCalendarRows } from './gantt-collapse.js';
-import { emptyGantt, newGanttSection } from './gantt.js';
+import { emptyGantt, newGanttSection, widthRange } from './gantt.js';
 import { toMermaid, normalize, isEmpty, newPeriod, newSection, THEMES, KINDS, getKind, stripKind, setKind } from './model.js';
 import { parseMermaid } from './parser.js';
 import { generateSprints, sprintPlanFromConfig } from './generator.js';
 import { EXAMPLES, DEFAULT_EXAMPLE, GANTT_EXAMPLE, nextMonday as nextMondayIso } from './examples.js';
-import { downloadSvg, downloadPng, copyText } from './export.js';
+import { downloadSvg, downloadPng, copyText, PNG_SIZES, cleanPngSize } from './export.js';
 import { PRESETS, themeVars, applyVars } from './themes.js';
 import { loadLocal, saveLocal, encodeShare, decodeShare } from './storage.js';
 import { isPng, stateFromPng, stateFromSvg } from './embed.js';
@@ -304,8 +305,20 @@ function renderSettings() {
   $$('input[name="direction"]').forEach((r) => (r.checked = r.value === state.direction));
   $('#theme').value = state.theme;
   $('#multicolor').checked = !state.disableMulticolor;
+  renderPngSize();
   $('#accTitle').value = state.accTitle;
   $('#accDescr').value = state.accDescr;
+}
+
+/** "2x" → "2×", "1920px" → "1920 px wide". */
+const pngSizeLabel = (v) => (v.endsWith('x') ? `${v.slice(0, -1)}×` : `${v.slice(0, -2)} px wide`);
+
+/** PNG size picker: a preset, or "Other width…" with a number field. */
+function renderPngSize() {
+  const preset = PNG_SIZES.includes(state.pngSize);
+  $('#png-size').value = preset ? state.pngSize : 'custom';
+  $('#png-width').hidden = preset;
+  $('#png-width').value = preset ? '' : parseInt(state.pngSize, 10);
 }
 
 function bindSettings() {
@@ -345,6 +358,29 @@ function bindSettings() {
     snapshot();
     state.titleAlign = ev.target.checked ? 'left' : 'center';
     update();
+  });
+  $('#png-size').innerHTML = [
+    ...PNG_SIZES.map((v) => `<option value="${v}">${pngSizeLabel(v)}</option>`),
+    '<option value="custom">Other width…</option>',
+  ].join('');
+  $('#png-size').addEventListener('change', (ev) => {
+    if (ev.target.value === 'custom') {
+      $('#png-width').hidden = false;
+      $('#png-width').focus();
+      return;
+    }
+    snapshot();
+    state.pngSize = ev.target.value;
+    renderPngSize();
+    saveLocal(state);
+  });
+  $('#png-width').addEventListener('change', (ev) => {
+    const size = cleanPngSize(`${Math.round(Number(ev.target.value))}px`);
+    if (!size) return renderPngSize();
+    snapshot();
+    state.pngSize = size;
+    renderPngSize();
+    saveLocal(state);
   });
   $('#multicolor').addEventListener('change', (ev) => {
     snapshot();
@@ -388,7 +424,7 @@ function previewOptions() {
     autoDirection: state.mode === 'timeline' && $('#responsive').checked,
     // Gantt: always lay out at the chart's own width (useWidth in the code). On
     // desktop it scrolls horizontally, on phones it scales down (zoom for details).
-    ...(state.mode === 'gantt' ? { maxWidth: 4000 } : {}),
+    ...(state.mode === 'gantt' ? { maxWidth: widthRange(state.gantt).max } : {}),
     zoom: 'auto',
     onError: showError,
     // Runs after every (re-)layout, including resizes.
@@ -428,8 +464,12 @@ function renderPreview() {
   if (!mounted) {
     preview.innerHTML = '';
     mounted = mount(preview, code, previewOptions());
-  } else if (code === lastPreview.code && state.titleAlign !== lastPreview.titleAlign) {
-    // Only the title alignment changed (not part of the code): mount again from scratch.
+  } else if (
+    (code === lastPreview.code && state.titleAlign !== lastPreview.titleAlign) ||
+    (code !== lastPreview.code && withoutComments(code) === withoutComments(lastPreview.code))
+  ) {
+    // Only our post-processing changed – the title alignment (not part of the code) or `%%` comments
+    // (bar looks, end dates, notes …): Pele may skip such an update, so mount again from scratch.
     mounted.destroy();
     preview.innerHTML = '';
     mounted = mount(preview, code, previewOptions());
@@ -439,12 +479,17 @@ function renderPreview() {
   lastPreview = { code, titleAlign: state.titleAlign };
 }
 let lastPreview = { code: '', titleAlign: 'center' };
+const withoutComments = (code) => code.replace(/^\s*%%.*\n/gm, '');
 
-/** On desktop a Gantt chart fills at least the preview width (e.g. in the wide view). */
+/**
+ * On desktop a Gantt chart fills at least the preview width (e.g. in the wide view),
+ * up to the chart's maximum width (Width setting; min = max fixes the width).
+ */
 function previewCode() {
   if (state.mode !== 'gantt' || matchMedia('(max-width: 720px)').matches) return currentCode;
   const available = $('#preview').clientWidth - 34;
-  return currentCode.replace(/useWidth: (\d+)/, (_, w) => `useWidth: ${Math.max(Number(w), available)}`);
+  const { max } = widthRange(state.gantt);
+  return currentCode.replace(/useWidth: (\d+)/, (_, w) => `useWidth: ${Math.max(Number(w), Math.min(available, max))}`);
 }
 
 /**
@@ -459,15 +504,24 @@ function exportSvg() {
   try {
     // Same width as the preview (e.g. the wide view): what you see is what you export.
     const { svg } = render(previewCode(), { padding: 16 });
-    const el = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
+    const el = document.importNode(new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement, true);
     const vars = themeVars(state.theme, state.disableMulticolor);
     applyVars(el, vars);
-    collapseCalendarRows(el, state);
-    styleGantt(el, state);
-    alignTitle(el, state.titleAlign);
-    if (state.mode === 'gantt') {
-      addLegend(el, state);
-      addNotes(el, state);
+    // attached (off screen) while post-processing, so text widths can be measured
+    const host = document.createElement('div');
+    host.style.cssText = 'position:absolute;left:-100000px;top:0;visibility:hidden';
+    host.append(el);
+    document.body.append(host);
+    try {
+      collapseCalendarRows(el, state);
+      styleGantt(el, state);
+      alignTitle(el, state.titleAlign);
+      if (state.mode === 'gantt') {
+        addLegend(el, state);
+        addNotes(el, state);
+      }
+    } finally {
+      host.remove();
     }
     const background = $('#transparent').checked ? null : vars['--pele-bg'];
     return { el, background };
@@ -737,7 +791,7 @@ function bindToolbar() {
     const out = exportSvg();
     if (!out) return;
     try {
-      await downloadPng(out.el, state.title, out.background, state);
+      await downloadPng(out.el, state.title, out.background, state, state.pngSize);
     } catch (err) {
       toast(err.message);
     }
@@ -761,6 +815,12 @@ function bindToolbar() {
   } catch {
     /* optional */
   }
+
+  // Drag the divider to make the editor wider or narrower (a Gantt chart fills the preview width).
+  bindSplitter($('.layout'), $('#splitter'), $('#pane-edit'), () => {
+    $$('#tree textarea, #gantt-editor textarea').forEach(autosize);
+    if (currentCode && state.mode === 'gantt') renderPreview();
+  });
 
   $$('.tabbar button').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
 }

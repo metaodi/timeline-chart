@@ -3,7 +3,7 @@
  * epics…) and tasks defined by a start rule and a duration. Concrete dates are
  * computed by scheduleGantt() and shown under each task.
  */
-import { TASK_TYPES, STATUSES, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
+import { TASK_TYPES, STATUSES, LOOKS, END_DATE_MODES, END_DATE_FORMATS, showsEndDate, AXIS_PRESETS, TICK_UNITS, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI, cleanWidthRange, widthRange, widthLabel, WIDTH_LIMITS } from './gantt.js';
 import { themeVars, rowColour, themeColour } from './themes.js';
 import { sortable, moveBetween } from './drag.js';
 import { formatDate, isoDate, nextName } from './generator.js';
@@ -99,6 +99,18 @@ export function createGanttEditor(root, api) {
     const status = `<select class="status" data-gfield="status" data-gs="${s}" data-gt="${t}" aria-label="Status">${STATUSES.map(
       (x) => option(x.id, x.label, x.id === task.status),
     ).join('')}</select>`;
+    const look =
+      task.type === 'task'
+        ? `<select class="look" data-gfield="look" data-gs="${s}" data-gt="${t}" aria-label="Look">${LOOKS.map((x) =>
+            option(x.id, x.label, x.id === (task.look ?? '')),
+          ).join('')}</select>`
+        : '';
+    // end date of this entry on/off (only while the chart shows end dates)
+    const shown = showsEndDate(g(), task);
+    const endDate =
+      g().endDates && task.type !== 'deadline'
+        ? iconBtn('enddate', shown ? 'End date shown – click to hide it for this entry' : 'End date hidden – click to show it for this entry', '📅', shown ? 'has-note' : 'off')
+        : '';
     const when =
       task.type === 'task'
         ? `<label>Start ${startSelect(task, s, t, cal, planStart)}</label><label>Duration ${durationInputs(task, s, t, cal)}</label>`
@@ -111,7 +123,7 @@ export function createGanttEditor(root, api) {
         <textarea rows="1" data-gfield="name" data-gs="${s}" data-gt="${t}" placeholder="${placeholder}">${esc(task.name)}</textarea>
         <span class="tools">${iconBtn('task-up', 'Move up', '↑')}${iconBtn('task-down', 'Move down', '↓')}${iconBtn('task-dup', 'Duplicate', '⧉')}${iconBtn('task-delete', 'Delete', '✕', 'del')}</span>
       </div>
-      <div class="gtask-when">${when}${status}${iconBtn('note', task.note?.trim() ? 'Edit note' : 'Add a note (hover + below the chart)', '📝', task.note?.trim() ? 'has-note' : '')}${iconBtn('link', task.link ? 'Edit link' : 'Add a link (the entry becomes clickable)', '🔗', task.link ? 'has-note' : '')}</div>
+      <div class="gtask-when">${when}${status}${look}${endDate}${iconBtn('note', task.note?.trim() ? 'Edit note' : 'Add a note (hover + below the chart)', '📝', task.note?.trim() ? 'has-note' : '')}${iconBtn('link', task.link ? 'Edit link' : 'Add a link (the entry becomes clickable)', '🔗', task.link ? 'has-note' : '')}</div>
       ${noteOpen.has(task.id) || task.note?.trim() ? `<textarea rows="1" class="gnote" data-gfield="note" data-gs="${s}" data-gt="${t}" placeholder="Note – shown on hover and below the chart; URLs become links">${esc(task.note ?? '')}</textarea>` : ''}
       ${linkOpen.has(task.id) || task.link ? `<input type="url" class="gnote glink" data-gfield="link" data-gs="${s}" data-gt="${t}" value="${esc(task.link ?? '')}" placeholder="https://… – opens when the entry is clicked" inputmode="url" />` : ''}
       <div class="gtask-dates">${describe(sched.dates[s][t], task.type)}</div>
@@ -239,15 +251,83 @@ export function createGanttEditor(root, api) {
           ${option('ordered', 'In my order – one row per entry', g().layout === 'ordered')}
         </select>
       </div>
+      <div class="grows">
+        <span class="muted small">Dates</span>
+        <select data-genddates="mode" aria-label="End dates after bars and milestones">
+          ${END_DATE_MODES.map((f) => option(f.id, f.label, f.id === g().endDates)).join('')}
+        </select>
+        ${
+          g().endDates
+            ? `<select data-genddates="format" aria-label="Format of the end dates">
+          ${END_DATE_FORMATS.map((f) => option(f.id, f.label, f.id === g().endDateFormat)).join('')}
+        </select>`
+            : ''
+        }
+      </div>
+      ${axisHtml()}
+      ${widthHtml()}
       ${rowsHtml()}
     </div>`;
+  }
+
+  /** Chart width range: a slider with two thumbs (min, max; both together = fixed width). */
+  function widthHtml() {
+    const { min, max, custom } = widthRange(g());
+    const { min: lo, max: hi, step } = WIDTH_LIMITS;
+    const thumb = (key, value, label) =>
+      `<input type="range" data-gwidth="${key}" min="${lo}" max="${hi}" step="${step}" value="${value}"
+        aria-label="${label}" aria-valuetext="${value} px" />`;
+    return `<div class="grows gwidth" title="Chart width in pixels: drag both handles together for a fixed width">
+        <span class="muted small">Width</span>
+        <div class="range2" style="${rangeStyle(min, max)}">
+          ${thumb('min', min, 'Minimum chart width')}${thumb('max', max, 'Maximum chart width')}
+        </div>
+        <span class="muted small gwidth-val">${widthLabel(g())}</span>
+        ${custom ? '<button type="button" class="btn small" data-gaction="width-auto" title="Automatic width (1000 – 4000 px)">Auto</button>' : ''}
+      </div>`;
+  }
+
+  /** Position of the highlighted part of the width slider; the min thumb on top in the right half (overlap). */
+  function rangeStyle(min, max) {
+    const { min: lo, max: hi } = WIDTH_LIMITS;
+    const at = (v) => Math.max(0, Math.min(1, (v - lo) / (hi - lo))).toFixed(4);
+    return `--lo:${at(min)};--hi:${at(max)};--min-z:${at(min) > 0.5 ? 2 : 0}`;
+  }
+
+  let axisCustom = false; // "Custom…" chosen, even while the values still match a preset
+
+  /** Time axis: presets, or a custom label format (strftime) and tick interval. */
+  function axisHtml() {
+    const { axisFormat, tickInterval } = g();
+    const preset = AXIS_PRESETS.find((p) => p.format === axisFormat && p.tick === tickInterval);
+    const custom = axisCustom || !preset;
+    const m = /^(\d+)(\w+)$/.exec(tickInterval);
+    const help = 'Label format (strftime): %d day, %m month, %Y year, %y 2-digit year, %b Jan, %B January, %V week number';
+    return `<div class="grows gaxis">
+        <span class="muted small">Axis</span>
+        <select data-gaxis="preset" aria-label="Time axis">
+          ${AXIS_PRESETS.map((p) => option(p.id, p.label, !custom && p === preset)).join('')}
+          ${option('custom', 'Custom…', custom)}
+        </select>
+        ${
+          custom
+            ? `<input type="text" data-gaxis="format" value="${esc(axisFormat)}" placeholder="%d %b" title="${help}" aria-label="Axis label format" spellcheck="false" />
+        <span class="muted small">every</span>
+        <input type="number" data-gaxis="tick-n" min="1" max="999" value="${m ? m[1] : 1}" aria-label="Tick interval"${m ? '' : ' disabled'} />
+        <select data-gaxis="tick-unit" aria-label="Tick unit">
+          ${option('', g().calendar.startDate ? 'sprint (auto)' : 'auto', !m)}
+          ${TICK_UNITS.map((u) => option(u, `${u}(s)`, m?.[2] === u)).join('')}
+        </select>`
+            : ''
+        }
+      </div>`;
   }
 
   /** Selector for the focused field, so focus survives a re-render. */
   function focusKey() {
     const el = document.activeElement;
     if (!el || !root.contains(el)) return null;
-    const attr = ['gpfield', 'gfield', 'gcal', 'gaction'].find((k) => el.dataset[k]);
+    const attr = ['gpfield', 'gfield', 'gcal', 'gaction', 'gaxis', 'gwidth'].find((k) => el.dataset[k]);
     const field = attr ? `[data-${attr}="${el.dataset[attr]}"]` : null;
     if (!field) return null;
     const scope = ['pi', 'sp', 'gs', 'gt']
@@ -350,6 +430,7 @@ export function createGanttEditor(root, api) {
     return before ? nextName(before.name.trim()) : first;
   }
   const actions = {
+    'width-auto': () => api.change(() => Object.assign(g(), { minWidth: 0, maxWidth: 0 })),
     calendar: () => api.openCalendar(),
     link: ({ s, t }) => {
       const sel = `[data-gfield="link"][data-gs="${s}"][data-gt="${t}"]`;
@@ -358,6 +439,12 @@ export function createGanttEditor(root, api) {
         render();
       }
       root.querySelector(sel)?.focus();
+    },
+    enddate: ({ s, t }) => {
+      const task = g().sections[s].tasks[t];
+      const shown = showsEndDate(g(), task);
+      // store the override; back to "follow the chart" when it matches the chart's setting
+      api.change(() => (task.endDate = shown ? (g().endDates === 'all' ? 'hide' : '') : g().endDates === 'some' ? 'show' : ''));
     },
     note: ({ s, t }) => {
       const task = g().sections[s].tasks[t];
@@ -461,6 +548,22 @@ export function createGanttEditor(root, api) {
       api.update();
       return;
     }
+    // Width slider: update the chart while dragging; the thumbs cannot pass each other
+    if (el.dataset.gwidth) {
+      api.snapshotTyping();
+      const range = widthRange(g());
+      const isMin = el.dataset.gwidth === 'min';
+      const value = isMin ? Math.min(Number(el.value), range.max) : Math.max(Number(el.value), range.min);
+      el.value = value;
+      el.setAttribute('aria-valuetext', `${value} px`);
+      Object.assign(g(), cleanWidthRange(isMin ? value : g().minWidth, isMin ? g().maxWidth : value));
+      const row = el.closest('.gwidth');
+      const now = widthRange(g());
+      row.querySelector('.range2').style.cssText = rangeStyle(now.min, now.max);
+      row.querySelector('.gwidth-val').textContent = widthLabel(g());
+      api.update();
+      return;
+    }
     // PI / sprint names: update the chart while typing (dates do not change)
     if (el.dataset.gpfield === 'pi-name' || el.dataset.gpfield === 'sp-name') {
       api.snapshotTyping();
@@ -492,6 +595,37 @@ export function createGanttEditor(root, api) {
     const el = ev.target;
     if (el.hasAttribute('data-glayout')) {
       api.change(() => (g().layout = el.value === 'ordered' ? 'ordered' : 'compact'));
+      return;
+    }
+    if (el.dataset.gaxis) {
+      const which = el.dataset.gaxis;
+      if (which === 'preset') {
+        const p = AXIS_PRESETS.find((x) => x.id === el.value);
+        axisCustom = !p;
+        if (p) api.change(() => Object.assign(g(), { axisFormat: p.format, tickInterval: p.tick }));
+        else render(); // just show the custom fields (prefilled with the current values)
+        return;
+      }
+      axisCustom = true;
+      const row = el.closest('.gaxis');
+      const n = Math.max(1, Math.min(999, Math.round(Number(row.querySelector('[data-gaxis="tick-n"]').value) || 1)));
+      const unit = row.querySelector('[data-gaxis="tick-unit"]').value;
+      api.change(() => {
+        if (which === 'format') g().axisFormat = el.value.replace(/[#;]/g, '').trim();
+        else g().tickInterval = unit ? `${n}${unit}` : '';
+      });
+      return;
+    }
+    if (el.dataset.gwidth) {
+      render(); // state is already set while dragging; show the "Auto" button
+      return;
+    }
+    if (el.dataset.genddates === 'mode') {
+      api.change(() => (g().endDates = END_DATE_MODES.some((f) => f.id === el.value) ? el.value : ''));
+      return;
+    }
+    if (el.dataset.genddates === 'format') {
+      api.change(() => (g().endDateFormat = END_DATE_FORMATS.some((f) => f.id === el.value) ? el.value : 'dmy'));
       return;
     }
     if (el.dataset.grows) {
@@ -535,6 +669,9 @@ export function createGanttEditor(root, api) {
           break;
         case 'status':
           task.status = el.value;
+          break;
+        case 'look':
+          task.look = LOOKS.some((l) => l.id === el.value) ? el.value : '';
           break;
         case 'link': {
           // add https:// to bare addresses like "jira.example.com/ABC-1"
