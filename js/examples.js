@@ -71,7 +71,8 @@ export function ebpExample() {
       showSprints: false,
       layout: 'ordered',
       rows: ['none', 'none'],
-      endDates: 'dmy',
+      endDates: 'all',
+      endDateFormat: 'dmy',
       axisFormat: '%m.%Y',
       tickInterval: '1month',
       sections: [
@@ -125,7 +126,8 @@ export function ebpOfferExample() {
       showSprints: true,
       layout: 'ordered',
       rows: ['none', 'none'],
-      endDates: 'dmy',
+      endDates: 'all',
+      endDateFormat: 'dmy',
       axisFormat: '%d.%m.%Y',
       sections: [
         {

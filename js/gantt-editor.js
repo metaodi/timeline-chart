@@ -3,7 +3,7 @@
  * epics…) and tasks defined by a start rule and a duration. Concrete dates are
  * computed by scheduleGantt() and shown under each task.
  */
-import { TASK_TYPES, STATUSES, LOOKS, END_DATE_FORMATS, AXIS_PRESETS, TICK_UNITS, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
+import { TASK_TYPES, STATUSES, LOOKS, END_DATE_MODES, END_DATE_FORMATS, showsEndDate, AXIS_PRESETS, TICK_UNITS, DURATION_UNITS, SECTION_COLOURS, ROW_PRESETS, scheduleGantt, sectionColour, newTask, newGanttSection, newPlanSprint, newPlanPI } from './gantt.js';
 import { themeVars, rowColour, themeColour } from './themes.js';
 import { sortable, moveBetween } from './drag.js';
 import { formatDate, isoDate, nextName } from './generator.js';
@@ -104,6 +104,12 @@ export function createGanttEditor(root, api) {
             option(x.id, x.label, x.id === (task.look ?? '')),
           ).join('')}</select>`
         : '';
+    // end date of this entry on/off (only while the chart shows end dates)
+    const shown = showsEndDate(g(), task);
+    const endDate =
+      g().endDates && task.type !== 'deadline'
+        ? iconBtn('enddate', shown ? 'End date shown – click to hide it for this entry' : 'End date hidden – click to show it for this entry', '📅', shown ? 'has-note' : 'off')
+        : '';
     const when =
       task.type === 'task'
         ? `<label>Start ${startSelect(task, s, t, cal, planStart)}</label><label>Duration ${durationInputs(task, s, t, cal)}</label>`
@@ -116,7 +122,7 @@ export function createGanttEditor(root, api) {
         <textarea rows="1" data-gfield="name" data-gs="${s}" data-gt="${t}" placeholder="${placeholder}">${esc(task.name)}</textarea>
         <span class="tools">${iconBtn('task-up', 'Move up', '↑')}${iconBtn('task-down', 'Move down', '↓')}${iconBtn('task-dup', 'Duplicate', '⧉')}${iconBtn('task-delete', 'Delete', '✕', 'del')}</span>
       </div>
-      <div class="gtask-when">${when}${status}${look}${iconBtn('note', task.note?.trim() ? 'Edit note' : 'Add a note (hover + below the chart)', '📝', task.note?.trim() ? 'has-note' : '')}${iconBtn('link', task.link ? 'Edit link' : 'Add a link (the entry becomes clickable)', '🔗', task.link ? 'has-note' : '')}</div>
+      <div class="gtask-when">${when}${status}${look}${endDate}${iconBtn('note', task.note?.trim() ? 'Edit note' : 'Add a note (hover + below the chart)', '📝', task.note?.trim() ? 'has-note' : '')}${iconBtn('link', task.link ? 'Edit link' : 'Add a link (the entry becomes clickable)', '🔗', task.link ? 'has-note' : '')}</div>
       ${noteOpen.has(task.id) || task.note?.trim() ? `<textarea rows="1" class="gnote" data-gfield="note" data-gs="${s}" data-gt="${t}" placeholder="Note – shown on hover and below the chart; URLs become links">${esc(task.note ?? '')}</textarea>` : ''}
       ${linkOpen.has(task.id) || task.link ? `<input type="url" class="gnote glink" data-gfield="link" data-gs="${s}" data-gt="${t}" value="${esc(task.link ?? '')}" placeholder="https://… – opens when the entry is clicked" inputmode="url" />` : ''}
       <div class="gtask-dates">${describe(sched.dates[s][t], task.type)}</div>
@@ -226,9 +232,16 @@ export function createGanttEditor(root, api) {
       </div>
       <div class="grows">
         <span class="muted small">Dates</span>
-        <select data-genddates aria-label="End dates after bars and milestones">
-          ${END_DATE_FORMATS.map((f) => option(f.id, f.label, f.id === g().endDates)).join('')}
+        <select data-genddates="mode" aria-label="End dates after bars and milestones">
+          ${END_DATE_MODES.map((f) => option(f.id, f.label, f.id === g().endDates)).join('')}
         </select>
+        ${
+          g().endDates
+            ? `<select data-genddates="format" aria-label="Format of the end dates">
+          ${END_DATE_FORMATS.map((f) => option(f.id, f.label, f.id === g().endDateFormat)).join('')}
+        </select>`
+            : ''
+        }
       </div>
       ${axisHtml()}
       ${rowsHtml()}
@@ -380,6 +393,12 @@ export function createGanttEditor(root, api) {
       }
       root.querySelector(sel)?.focus();
     },
+    enddate: ({ s, t }) => {
+      const task = g().sections[s].tasks[t];
+      const shown = showsEndDate(g(), task);
+      // store the override; back to "follow the chart" when it matches the chart's setting
+      api.change(() => (task.endDate = shown ? (g().endDates === 'all' ? 'hide' : '') : g().endDates === 'some' ? 'show' : ''));
+    },
     note: ({ s, t }) => {
       const task = g().sections[s].tasks[t];
       const field = root.querySelector(`[data-gfield="note"][data-gs="${s}"][data-gt="${t}"]`);
@@ -526,8 +545,12 @@ export function createGanttEditor(root, api) {
       });
       return;
     }
-    if (el.hasAttribute('data-genddates')) {
-      api.change(() => (g().endDates = END_DATE_FORMATS.some((f) => f.id === el.value) ? el.value : ''));
+    if (el.dataset.genddates === 'mode') {
+      api.change(() => (g().endDates = END_DATE_MODES.some((f) => f.id === el.value) ? el.value : ''));
+      return;
+    }
+    if (el.dataset.genddates === 'format') {
+      api.change(() => (g().endDateFormat = END_DATE_FORMATS.some((f) => f.id === el.value) ? el.value : 'dmy'));
       return;
     }
     if (el.dataset.grows) {

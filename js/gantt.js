@@ -10,7 +10,8 @@
  *   showSprints: boolean,      // a "Sprints" row
  *   excludeWeekends: boolean,
  *   todayMarker: boolean,
- *   endDates: '' | 'dmy' | 'iso', // end date (with a dot) after bars and milestones
+ *   endDates: '' | 'all' | 'some', // end date (with a dot) after bars and milestones: none, all, chosen tasks
+ *   endDateFormat: 'dmy' | 'iso',
  *   axisFormat: string,   // time axis labels (Mermaid axisFormat, strftime: "%m.%Y"); '' = "%d %b"
  *   tickInterval: string, // ticks + grid lines ("1month", "2week", "3day"); '' = one per sprint (or Pele's choice)
  *   sections: [{ name, color, tasks: Task[] }],   // color: 0 = automatic, 1..8 = theme colour
@@ -21,6 +22,7 @@
  *   type: 'task' | 'milestone' | 'deadline',
  *   status: '' | 'done' | 'active' | 'crit',
  *   look: '' | 'hatch' | 'option',  // bars only: hatched (independent work package) / dashed outline (option)
+ *   endDate: '' | 'show' | 'hide',  // per task: end date shown / hidden regardless of the chart's `endDates`
  *   from: Start,         // where a bar starts / where a milestone or deadline sits
  *   duration: string,    // "2s" sprints, "3w" weeks, "10d" working days; "" = until `to`
  *   to: Ref,             // end when no duration is given
@@ -56,12 +58,23 @@ export const LOOKS = [
   { id: 'hatch', label: 'Hatched (independent)' },
   { id: 'option', label: 'Dashed (option)' },
 ];
-/** Formats of the end dates drawn after bars and milestones ('' = none). */
-export const END_DATE_FORMATS = [
+/** Which entries show their end date (a dot after bars + the date, also next to milestones). */
+export const END_DATE_MODES = [
   { id: '', label: 'No end dates' },
-  { id: 'dmy', label: 'End dates 31.03.2027' },
-  { id: 'iso', label: 'End dates 2027-03-31' },
+  { id: 'all', label: 'End dates on all entries' },
+  { id: 'some', label: 'End dates on chosen entries (📅)' },
 ];
+/** Formats of the end dates. */
+export const END_DATE_FORMATS = [
+  { id: 'dmy', label: '31.03.2027' },
+  { id: 'iso', label: '2027-03-31' },
+];
+
+/** Whether a task shows its end date: the chart's setting, overridden per task ("show" / "hide"). */
+export function showsEndDate(g, task) {
+  if (!g?.endDates || !task || task.type === 'deadline') return false;
+  return g.endDates === 'all' ? task.endDate !== 'hide' : task.endDate === 'show';
+}
 /** Default label format of the time axis. */
 export const DEFAULT_AXIS_FORMAT = '%d %b';
 /** Presets for the time axis: label format (Mermaid `axisFormat`, strftime) and tick interval ('' = automatic). */
@@ -77,6 +90,7 @@ const isTick = (t) => new RegExp(`^[1-9]\\d{0,2}(${TICK_UNITS.join('|')})$`).tes
 export const cleanAxisFormat = (f) => String(f ?? '').replace(/[#;\r\n]/g, '').trim().slice(0, 40);
 const LOOKS_KEY = 'task-looks';
 const END_DATES_KEY = 'end-dates';
+const END_DATE_TASKS_KEY = 'end-date-tasks';
 const CAL_KEY = 'sprint-calendar';
 const PLAN_KEY = 'sprint-plan';
 const COLOURS_KEY = 'section-colours';
@@ -103,7 +117,8 @@ export function emptyGantt() {
     layout: 'compact', // 'compact' (packed by date) | 'ordered' (one row per entry, editor order)
     excludeWeekends: false, // kept for imported charts; no UI (clean look)
     todayMarker: false,
-    endDates: '', // see END_DATE_FORMATS
+    endDates: '', // see END_DATE_MODES
+    endDateFormat: 'dmy', // see END_DATE_FORMATS
     axisFormat: '', // '' = DEFAULT_AXIS_FORMAT
     tickInterval: '', // '' = automatic
     sections: [],
@@ -174,7 +189,10 @@ export function normalizeGantt(g) {
   for (const k of ['showPIs', 'showSprints', 'excludeWeekends', 'todayMarker']) d[k] = Boolean(d[k]);
   d.showNotes = d.showNotes !== false;
   d.layout = d.layout === 'ordered' ? 'ordered' : 'compact';
-  d.endDates = END_DATE_FORMATS.some((f) => f.id === d.endDates) ? d.endDates : '';
+  // (first version: endDates was the format, meaning "all")
+  if (END_DATE_FORMATS.some((f) => f.id === d.endDates)) [d.endDateFormat, d.endDates] = [d.endDates, 'all'];
+  d.endDates = END_DATE_MODES.some((f) => f.id === d.endDates) ? d.endDates : '';
+  d.endDateFormat = END_DATE_FORMATS.some((f) => f.id === d.endDateFormat) ? d.endDateFormat : 'dmy';
   d.axisFormat = cleanAxisFormat(d.axisFormat);
   if (d.axisFormat === DEFAULT_AXIS_FORMAT) d.axisFormat = '';
   d.tickInterval = isTick(d.tickInterval) ? d.tickInterval : '';
@@ -200,6 +218,7 @@ export function normalizeGantt(g) {
               type: types.includes(t?.type) ? t.type : 'task',
               status: statuses.includes(t?.status) ? t.status : '',
               look: looks.includes(t?.look) ? t.look : '',
+              endDate: ['show', 'hide'].includes(t?.endDate) ? t.endDate : '',
               from: String(t?.from || 'prev'),
               duration: /^\d+[swd]$/.test(t?.duration ?? '') ? t.duration : '',
               note: String(t?.note ?? ''), // details: tooltip + footnote (gantt-notes.js)
@@ -437,7 +456,10 @@ export function toGanttMermaid(t, frontmatter = []) {
   const looks = {};
   g.sections.forEach((s, si) => s.tasks.forEach((t, ti) => t.look && t.type === 'task' && (looks[`g${si}t${ti}`] = t.look)));
   if (Object.keys(looks).length) out.push(`  %% ${LOOKS_KEY} ${JSON.stringify(looks)}`);
-  if (g.endDates) out.push(`  %% ${END_DATES_KEY} ${g.endDates}`);
+  if (g.endDates) out.push(`  %% ${END_DATES_KEY} ${g.endDates} ${g.endDateFormat || 'dmy'}`);
+  const endDateTasks = {};
+  g.sections.forEach((s, si) => s.tasks.forEach((t, ti) => ['show', 'hide'].includes(t.endDate) && t.type !== 'deadline' && (endDateTasks[`g${si}t${ti}`] = t.endDate)));
+  if (Object.keys(endDateTasks).length) out.push(`  %% ${END_DATE_TASKS_KEY} ${JSON.stringify(endDateTasks)}`);
   g.sections.forEach((s, si) => {
     const lines = s.tasks
       .map((task, ti) => {
@@ -449,7 +471,7 @@ export function toGanttMermaid(t, frontmatter = []) {
           const d = when.start.getTime();
           const room = Math.min((d - scale.start) / 864e5, (scale.end - d) / 864e5 + 1);
           // (with end dates the label also holds the date)
-          const label = g.endDates ? `${task.name} 00.00.0000` : task.name;
+          const label = showsEndDate(g, task) ? `${task.name} 00.00.0000` : task.name;
           span = Math.min(milestoneSpan(label, scale.pxPerDay), Math.floor(room));
         }
         return taskLine(task, when, `g${si}t${ti}`, span);
@@ -526,6 +548,7 @@ export function parseGanttMermaid(code) {
   let colours = [];
   let notes = {};
   let looks = {};
+  let endDateTasks = {};
   const links = {};
 
   String(code)
@@ -551,9 +574,20 @@ export function parseGanttMermaid(code) {
           } catch {
             res.warnings.push(`Line ${i + 1}: could not read the bar looks`);
           }
+        } else if (line.startsWith(`%% ${END_DATE_TASKS_KEY} `)) {
+          try {
+            endDateTasks = JSON.parse(line.slice(`%% ${END_DATE_TASKS_KEY} `.length));
+          } catch {
+            res.warnings.push(`Line ${i + 1}: could not read the end dates of the tasks`);
+          }
         } else if (line.startsWith(`%% ${END_DATES_KEY} `)) {
-          const f = line.slice(`%% ${END_DATES_KEY} `.length).trim();
-          if (END_DATE_FORMATS.some((x) => x.id === f)) g.endDates = f;
+          for (const w of line.slice(`%% ${END_DATES_KEY} `.length).trim().split(/\s+/)) {
+            if (END_DATE_MODES.some((x) => x.id && x.id === w)) g.endDates = w;
+            else if (END_DATE_FORMATS.some((x) => x.id === w)) {
+              g.endDateFormat = w;
+              if (!g.endDates) g.endDates = 'all'; // "%% end-dates dmy" (first version)
+            }
+          }
         } else if (line.includes(ROWS_KEY)) {
           const rows = line.slice(line.indexOf(ROWS_KEY) + ROWS_KEY.length).split(',').map((x) => x.trim());
           if (rows.length === 2 && rows.every(isRowToken)) g.rows = rows;
@@ -657,6 +691,7 @@ export function parseGanttMermaid(code) {
       t.note = String(notes[`g${si}t${ti}`] ?? '');
       t.link = String(links[`g${si}t${ti}`] ?? '');
       t.look = t.type === 'task' && LOOKS.some((l) => l.id && l.id === looks[`g${si}t${ti}`]) ? looks[`g${si}t${ti}`] : '';
+      t.endDate = ['show', 'hide'].includes(endDateTasks[`g${si}t${ti}`]) ? endDateTasks[`g${si}t${ti}`] : '';
     }),
   );
   snapToSprints(g);
